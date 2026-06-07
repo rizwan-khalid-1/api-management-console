@@ -22,3 +22,5 @@ erl_crash.dump
 # Ignore package tarball (built via "mix hex.build").
 api_management_console_v2-*.tar
 
+# macOS folder metadata
+.DS_Store
