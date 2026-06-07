@@ -31,6 +31,23 @@ A Phoenix LiveView library that gives you real-time control over your backend ro
 
 ## Quick Start
 
+### Prerequisites
+
+Your Phoenix app must have LiveView's JavaScript client loaded. Every app created with `mix phx.new` ships with this in `assets/js/app.js`:
+
+```js
+import { Socket } from "phoenix"
+import { LiveSocket } from "phoenix_live_view"
+
+let csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
+let liveSocket = new LiveSocket("/live", Socket, { params: { _csrf_token: csrfToken } })
+liveSocket.connect()
+```
+
+If your app was scaffolded without this (e.g. `--no-assets`), you'll need to add it for live toggles. Without it, the console falls back to dead render only.
+
+### Install
+
 ```elixir
 # 1. Add the dependency (Git for now — Hex package coming soon)
 def deps do
@@ -48,23 +65,50 @@ $ mix deps.get
 **Option A — Use the `api_console` macro (quickest)**
 
 ```elixir
-# In your router. Add the import first, then use the macro.
-import ApiManagementConsoleV2.Router
+# In your router — `use` injects the route guard + auth pipeline automatically.
+use ApiManagementConsoleV2.Router
 
 scope "/" do
-  pipe_through [:browser, :your_auth_plug]   # your auth, your choice
+  pipe_through [:browser, :route_guard]
   api_console "/admin/apis"
 end
+```
+
+That's it. The `use` macro automatically:
+- Defines `:route_guard` pipeline — blocks disabled routes (403)
+- Defines the `:api_console_auth` pipeline (Basic Auth)
+- Imports the `api_console` macro
+
+**To enforce disabled routes**, add `:route_guard` to any scope's `pipe_through`. Or add the plug directly inside an existing pipeline:
+
+```elixir
+pipeline :api do
+  plug ApiManagementConsoleV2.Plugs.RouteGuard
+end
+```
+
+The macro automatically adds HTTP Basic Auth. Set credentials:
+
+```bash
+export API_CONSOLE_ADMIN_USERNAME=admin
+export API_CONSOLE_ADMIN_PASSWORD=your_password
 ```
 
 **Option B — Add routes manually (full control)**
 
 ```elixir
 # In your router — wire it up yourself
-scope "/admin/apis" do
-  pipe_through [:browser, :your_auth_plug]
+import Phoenix.LiveView.Router, only: [live: 3]
 
-  get "/", ApiManagementConsoleV2.ConsoleController, :index
+pipeline :route_guard do
+  plug ApiManagementConsoleV2.Plugs.RouteGuard
+end
+
+scope "/admin/apis" do
+  pipe_through [:browser, :route_guard]
+  plug ApiManagementConsoleV2Web.Plugs.RequireAdmin
+
+  live "/", ApiManagementConsoleV2Web.RouteConsoleLive, :index
 end
 ```
 

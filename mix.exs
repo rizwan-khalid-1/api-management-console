@@ -19,7 +19,8 @@ defmodule ApiManagementConsoleV2.MixProject do
 
   defp deps do
     [
-      {:phoenix, "~> 1.6 or ~> 1.7", optional: true}
+      {:phoenix, "~> 1.6 or ~> 1.7", optional: true},
+      {:phoenix_live_view, "~> 0.20 or ~> 1.0", optional: true}
     ]
   end
 

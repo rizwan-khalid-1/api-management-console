@@ -57,11 +57,22 @@ defmodule ApiManagementConsoleV2 do
     %{
       path: route.path,
       method: route.verb |> to_string() |> String.upcase(),
-      controller: route.plug |> Module.split() |> List.last(),
-      action: route.plug_opts,
+      controller: format_controller(route.plug),
+      action: format_action(route.plug_opts),
       plug: route.plug,
       plug_opts: route.plug_opts,
       helper: route.helper
     }
   end
+
+  defp format_controller(plug) when is_atom(plug) do
+    plug |> Module.split() |> List.last()
+  end
+
+  defp format_controller(_plug), do: "unknown"
+
+  defp format_action(plug_opts) when is_atom(plug_opts), do: plug_opts
+  defp format_action(plug_opts) when is_binary(plug_opts), do: plug_opts
+  defp format_action({key, _val}) when is_atom(key), do: key
+  defp format_action(_plug_opts), do: :unknown
 end

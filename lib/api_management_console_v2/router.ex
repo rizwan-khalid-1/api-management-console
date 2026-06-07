@@ -2,13 +2,16 @@ defmodule ApiManagementConsoleV2.Router do
   @moduledoc """
   Provides the `api_console/1` macro to mount console routes into a Phoenix router.
 
-  The macro is transparent — it only defines routes under the given path.
-  You control authentication, pipelines, and scoping entirely.
+  The macro is transparent — it only defines routes under the given path
+  with Basic Auth protection. You control the outer pipeline and scoping.
 
   ## Using the macro
 
+      # In your router module — `use` defines the auth pipeline:
+      use ApiManagementConsoleV2.Router
+
       scope "/" do
-        pipe_through [:browser, :my_auth]
+        pipe_through [:browser]
         api_console "/admin/apis"
       end
 
@@ -18,15 +21,37 @@ defmodule ApiManagementConsoleV2.Router do
   """
 
   @doc """
-  Mounts the API console dashboard routes under the given path.
+  Sets up the API console in the caller's router module.
 
-  All routes are scoped under `path`. No pipeline or auth is forced —
-  the caller's surrounding `pipe_through` applies exactly as-is.
+  Defines the `:api_console_auth` pipeline (Basic Auth via `RequireAdmin`)
+  and imports the `api_console/1` macro.
+  """
+  defmacro __using__(_opts) do
+    quote do
+      import ApiManagementConsoleV2.Router, only: [api_console: 1]
+
+      pipeline :route_guard do
+        plug ApiManagementConsoleV2.Plugs.RouteGuard
+      end
+
+      pipeline :api_console_auth do
+        plug ApiManagementConsoleV2Web.Plugs.RequireAdmin
+      end
+    end
+  end
+
+  @doc """
+  Mounts the API console LiveView dashboard under the given path.
+
+  Routes are wrapped with the `:api_console_auth` pipeline (HTTP Basic Auth).
+  Credentials are read from `API_CONSOLE_ADMIN_USERNAME` / `API_CONSOLE_ADMIN_PASSWORD`.
   """
   defmacro api_console(path) do
     quote bind_quoted: [path: path] do
       scope path, alias: false, as: false do
-        get "/", ApiManagementConsoleV2.ConsoleController, :index
+        import Phoenix.LiveView.Router, only: [live: 3]
+        pipe_through [:api_console_auth]
+        live "/", ApiManagementConsoleV2Web.RouteConsoleLive, :index
       end
     end
   end
