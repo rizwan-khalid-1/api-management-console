@@ -58,6 +58,7 @@ defmodule ApiManagementConsoleV2 do
       path: route.path,
       method: route.verb |> to_string() |> String.upcase(),
       controller: route.plug |> Module.split() |> List.last(),
+      action: route.plug_opts,
       plug: route.plug,
       plug_opts: route.plug_opts,
       helper: route.helper

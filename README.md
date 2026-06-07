@@ -32,29 +32,44 @@ A Phoenix LiveView library that gives you real-time control over your backend ro
 ## Quick Start
 
 ```elixir
-# 1. Add the dependency
+# 1. Add the dependency (Git for now — Hex package coming soon)
 def deps do
   [
-    {:api_management_console_v2, "~> 0.1.0"}
+    {:api_management_console, github: "rizwankhalid/api_management_console"}
   ]
 end
 
 # 2. Install
 $ mix deps.get
-$ mix api_console.install
+```
 
-# 3. Configure credentials
-config :api_console,
-  admin_username: System.fetch_env!("API_CONSOLE_ADMIN_USERNAME"),
-  admin_password: System.fetch_env!("API_CONSOLE_ADMIN_PASSWORD")
+### Mount the console in your router
 
-# 4. Mount the console in your router
+**Option A — Use the `api_console` macro (quickest)**
+
+```elixir
+# In your router. Add the import first, then use the macro.
+import ApiManagementConsoleV2.Router
+
 scope "/" do
-  pipe_through :browser
+  pipe_through [:browser, :your_auth_plug]   # your auth, your choice
   api_console "/admin/apis"
 end
+```
 
-# 5. Start your server
+**Option B — Add routes manually (full control)**
+
+```elixir
+# In your router — wire it up yourself
+scope "/admin/apis" do
+  pipe_through [:browser, :your_auth_plug]
+
+  get "/", ApiManagementConsoleV2.ConsoleController, :index
+end
+```
+
+**Start your server:**
+```bash
 $ mix phx.server
 # Visit http://localhost:4000/admin/apis
 ```
@@ -116,7 +131,7 @@ Offline validation via signed JWT tokens — no phone-home, no external server d
 
 ## Requirements
 
-- Elixir ~> 1.14
+- Elixir ~> 1.13
 - Phoenix ~> 1.6 or ~> 1.7
 - Erlang/OTP
 
@@ -124,7 +139,7 @@ Offline validation via signed JWT tokens — no phone-home, no external server d
 
 ## Documentation
 
-Full documentation is available at [https://hexdocs.pm/api_management_console_v2](https://hexdocs.pm/api_management_console_v2).
+Documentation is available in the `lib/` source and will be published to HexDocs once the package ships.
 
 ---
 

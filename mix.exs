@@ -3,9 +3,9 @@ defmodule ApiManagementConsoleV2.MixProject do
 
   def project do
     [
-      app: :api_management_console_v2,
+      app: :api_management_console,
       version: "0.1.0",
-      elixir: "~> 1.14",
+      elixir: "~> 1.13",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       description: "A simple API route discovery tool for Phoenix apps",
