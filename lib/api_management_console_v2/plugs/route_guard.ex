@@ -2,21 +2,17 @@ defmodule ApiManagementConsoleV2.Plugs.RouteGuard do
   @moduledoc """
   A Plug that blocks requests to disabled routes with a `403 Forbidden`.
 
-  Checks `ApiManagementConsoleV2.RoutePolicies` for the current
-  request's full path (METHOD + request_path joined). If the route is
-  explicitly disabled, the request is halted with 403.
-
-  Routes not found in the policy store default to **enabled**.
+  Checks `ApiManagementConsoleV2.RoutePolicies` for the current request.
+  Immutable routes and routes not found in the policy store pass through.
+  Only explicitly disabled mutable routes are blocked.
 
   ## Usage
 
-  Add to the pipeline(s) you want to protect:
+  Automatic via `use ApiManagementConsoleV2.Router` (the `:route_guard` pipeline).
+
+  Or manually inside any pipeline:
 
       pipeline :api do
-        plug ApiManagementConsoleV2.Plugs.RouteGuard
-      end
-
-      pipeline :browser do
         plug ApiManagementConsoleV2.Plugs.RouteGuard
       end
   """
@@ -32,21 +28,15 @@ defmodule ApiManagementConsoleV2.Plugs.RouteGuard do
 
   @impl true
   def call(conn, _opts) do
-    full_path = "#{conn.method} #{conn.request_path}"
+    router = :persistent_term.get({:api_management_console, :phoenix_router}, nil)
+    allowed = router && RoutePolicies.request_allowed?(router, conn.method, conn.request_path)
 
-    case Process.whereis(RoutePolicies) do
-      nil ->
-        # Policy store not started yet — pass through
-        conn
-
-      _pid ->
-        if RoutePolicies.enabled?(full_path) do
-          conn
-        else
-          conn
-          |> send_resp(403, "Route disabled — #{full_path}")
-          |> halt()
-        end
+    if allowed do
+      conn
+    else
+      conn
+      |> send_resp(403, "Route disabled")
+      |> halt()
     end
   end
 end

@@ -28,6 +28,8 @@ defmodule ApiManagementConsoleV2.Router do
   """
   defmacro __using__(_opts) do
     quote do
+      :persistent_term.put({:api_management_console, :phoenix_router}, __MODULE__)
+      :persistent_term.put({:api_management_console, :console_paths}, [])
       import ApiManagementConsoleV2.Router, only: [api_console: 1]
 
       pipeline :route_guard do
@@ -48,6 +50,10 @@ defmodule ApiManagementConsoleV2.Router do
   """
   defmacro api_console(path) do
     quote bind_quoted: [path: path] do
+      # Store the console path so it's automatically protected from being disabled
+      existing = :persistent_term.get({:api_management_console, :console_paths}, [])
+      :persistent_term.put({:api_management_console, :console_paths}, [path | existing])
+
       scope path, alias: false, as: false do
         import Phoenix.LiveView.Router, only: [live: 3]
         pipe_through [:api_console_auth]

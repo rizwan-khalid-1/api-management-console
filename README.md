@@ -70,7 +70,7 @@ use ApiManagementConsoleV2.Router
 
 scope "/" do
   pipe_through [:browser, :route_guard]
-  api_console "/admin/apis"
+  api_console "/admin/api-console"
 end
 ```
 
@@ -79,7 +79,21 @@ That's it. The `use` macro automatically:
 - Defines the `:api_console_auth` pipeline (Basic Auth)
 - Imports the `api_console` macro
 
-**To enforce disabled routes**, add `:route_guard` to any scope's `pipe_through`. Or add the plug directly inside an existing pipeline:
+**To enforce disabled routes**, add `:route_guard` to **every scope** you want protected — including API and browser routes, not just the console:
+
+```elixir
+scope "/", SampleBlogWeb do
+  pipe_through [:browser, :route_guard]
+  get "/", PageController, :index
+end
+
+scope "/api", SampleBlogWeb do
+  pipe_through [:api, :route_guard]
+  get "/blogs", BlogController, :index
+end
+```
+
+Or add the plug directly inside each pipeline:
 
 ```elixir
 pipeline :api do
@@ -94,6 +108,24 @@ export API_CONSOLE_ADMIN_USERNAME=admin
 export API_CONSOLE_ADMIN_PASSWORD=your_password
 ```
 
+### Configuration
+
+**Protected (immutable) routes** — routes that cannot be toggled, shown grayed out in the console. The console's own path is automatically protected.
+
+Add your own in `config/config.exs`. Supports two match types:
+
+```elixir
+config :api_management_console,
+  protected_routes: [
+    # String — matches path prefix or suffix
+    "/dev/dashboard",
+
+    # Regex — matches path AND controller module name
+    ~r{HealthController},
+    ~r{^/api/internal/}
+  ]
+```
+
 **Option B — Add routes manually (full control)**
 
 ```elixir
@@ -104,7 +136,7 @@ pipeline :route_guard do
   plug ApiManagementConsoleV2.Plugs.RouteGuard
 end
 
-scope "/admin/apis" do
+scope "/admin/api-console" do
   pipe_through [:browser, :route_guard]
   plug ApiManagementConsoleV2Web.Plugs.RequireAdmin
 
@@ -115,7 +147,7 @@ end
 **Start your server:**
 ```bash
 $ mix phx.server
-# Visit http://localhost:4000/admin/apis
+# Visit http://localhost:4000/admin/api-console
 ```
 
 ---
