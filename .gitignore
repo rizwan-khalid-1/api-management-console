@@ -24,3 +24,9 @@ api_management_console_v2-*.tar
 
 # macOS folder metadata
 .DS_Store
+
+# Editor tooling logs
+.lexical/
+.elixir-tools/
+.expert/
+.dexter/
