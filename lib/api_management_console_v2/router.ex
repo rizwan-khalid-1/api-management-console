@@ -57,6 +57,7 @@ defmodule ApiManagementConsoleV2.Router do
       scope path, alias: false, as: false do
         import Phoenix.LiveView.Router, only: [live: 3]
         pipe_through [:api_console_auth]
+        get "/audit.csv", ApiManagementConsoleV2Web.Plugs.AuditDownload, []
         live "/", ApiManagementConsoleV2Web.RouteConsoleLive, :index
       end
     end

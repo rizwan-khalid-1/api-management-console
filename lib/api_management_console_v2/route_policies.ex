@@ -142,11 +142,7 @@ defmodule ApiManagementConsoleV2.RoutePolicies do
   defp group_name(route) do
     route.plug
     |> Module.split()
-    |> case do
-      [name] -> name
-      [namespace | _] -> namespace
-      _ -> "Other"
-    end
+    |> List.last()
   end
 
   defp format_controller(plug) when is_atom(plug),

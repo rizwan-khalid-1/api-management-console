@@ -14,41 +14,60 @@
 
 ---
 
-## 🐛 Known Bugs
+## ✅ Phase 2 — Done
 
-- **Toggle buttons don't work on static sites** — `<button phx-click>` requires LiveView WebSocket. Consumers without LiveView JS (`--no-assets` apps) get dead render with non-functional toggles. Need a `<a href>` query-param fallback or dual-mode toggle.
+1. Search & Filter — text input, `phx-keyup` with debounce, filters by path/method/controller
+2. Audit Log — every toggle logged (who, what, when, old→new), expandable with pagination, CSV download
+3. Bulk Select & Toggle — checkboxes, per-group select/clear, floating bulk action bar
 
 ---
 
-## Phase 2 — Simpler Next Steps (easiest first)
+## Phase 3 — Next Steps (easiest first)
 
-### 1. Search & Filter
+### 1. Hide Routes / Groups from Console
 
-Text input above route groups that filters by path, method, or controller name — client-side only.
-
-- **Effort:** Very Low
-- **How:** `handle_event("search", ...)` + `Enum.filter` on `@grouped_routes`, no storage needed
-
-### 2. Audit Log
-
-Append every toggle to a log (`who`, `what`, `when`, `old_state`, `new_state`), displayed at bottom of console.
+Ability to hide specific routes or entire groups from the console view. Hidden routes are still enforced by the guard — they just don't appear in the UI.
 
 - **Effort:** Low
-- **How:** Append to a text file or separate DETS table, read-only `<details>` section at page bottom
+- **Storage:** `hidden_routes` DETS table or app config
+- **UI:** "Hide" button per route/group, "Show Hidden" toggle to reveal
 
-### 3. Export Config
+### 2. Configurable DETS File Path
 
-Download current route policies as a JSON file.
+Let consumers specify where policy and audit DETS files are stored.
+
+- **Effort:** Very Low
+- **Config:** `config :api_management_console, dets_dir: "/var/data/api_console"`
+- **Default:** `tmp/`
+
+### 3. Reset All Policies
+
+One-click button to re-enable ALL routes (clear the DETS table). Warns with confirmation.
+
+- **Effort:** Very Low
+- **UI:** Button in header card + confirm dialog
+- **How:** Delete DETS file or iterate all keys → `Store.put(key, true)`
+
+### 4. Refresh / Reload Routes
+
+Button to re-scan the router for new/deleted routes without restarting.
+
+- **Effort:** Very Low
+- **How:** `handle_event("refresh")` → `load_dashboard(socket)` — already built
+
+### 5. Company Branding
+
+Let consumers customize the console's appearance — app name, logo, colors.
 
 - **Effort:** Medium
-- **How:** `RoutePolicies.Store.all()` → JSON encode → `Plug.Conn.send_download` via a controller route
+- **Config:** `config :api_management_console, :branding, app_name: "Acme API Console", primary_color: "#FF6B35"`
+- **UI:** Replace default title with `Branding.app_name()`, apply custom colors
 
-### 4. Bulk Select & Toggle
+---
 
-Checkbox per route, "Select All" / "Deselect All", bulk ON/OFF button.
+## 🐛 Known Bugs
 
-- **Effort:** Medium
-- **How:** Checkbox UI + `handle_event("bulk_toggle", ...)` + `Store.bulk_put` (already built)
+- **Toggle buttons don't work on static sites** — `<button phx-click>` requires LiveView WebSocket. Consumers without LiveView JS (`--no-assets` apps) get dead render with non-functional toggles.
 
 ---
 

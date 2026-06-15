@@ -154,17 +154,22 @@ $ mix phx.server
 
 ## Features
 
-### Free (Always)
-- Auto-discover routes from any Phoenix router
-- Enable/disable individual routes and groups
-- DETS-backed persistent storage
-- Guard Plug — 403 for disabled routes
-- Admin Basic Auth (single user)
-- Up to 25 routes
+### Free (Included)
+- **Route Discovery** — auto-discovers all routes from Phoenix router
+- **One-Click Toggles** — enable/disable individual routes or entire groups
+- **Route Guard** — blocks disabled routes with 403 at the Plug level
+- **Basic Auth** — HTTP Basic Auth protects the console (configurable via env vars)
+- **DETS Storage** — persistent local storage, survives restarts
+- **Grouped Routes** — routes organized by controller name, toggleable to flat view
+- **Search & Filter** — instant search by path, method, or controller name
+- **Health Bar** — visual progress bar showing enabled vs disabled ratio
+- **Protected Routes** — immutable routes (greyed out, untoggleable) via config
+- **Dark Mode** — auto-detects `prefers-color-scheme`
+- **Bulk Operations** — checkboxes, select all/clear per group, bulk enable/disable
+- **Audit Log** — every toggle logged with old→new state, expandable with pagination, CSV download
 
 ### Pro (Licensed)
 - Unlimited routes
-- Search, filter, and bulk operations
 - Up to 5 admin accounts with RBAC (Admin/Viewer)
 - Company branding (custom logo, colors, app name)
 - Scheduled toggles for maintenance windows

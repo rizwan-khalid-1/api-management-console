@@ -3,19 +3,23 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
   LiveView dashboard for managing route availability.
 
   Features:
-    • Routes grouped by namespace
-    • Health bar showing enabled vs disabled ratio
-    • Sliding toggle switches (green ON / red OFF)
-    • Immutable routes (protected) grayed out
-    • Group toggle for bulk enable/disable
-    • Works in LIVE and STATIC (dead render) modes
+    • Routes grouped by namespace (toggleable to flat view)
+    • Health bar + enabled/disabled counts
+    • Search & filter by path, method, or controller
+    • Sliding toggle switches + group toggles
+    • Bulk select with enable/disable all
+    • Expandable audit log with pagination
+    • Immutable routes grayed out
+    • Works in LIVE and STATIC modes
   """
 
   use Phoenix.LiveView
 
   require Logger
 
-  alias ApiManagementConsoleV2.RoutePolicies
+  alias ApiManagementConsoleV2.{AuditLog, RoutePolicies}
+
+  @page_size 10
 
   @impl true
   def mount(_params, _session, socket) do
@@ -28,46 +32,147 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
       |> assign(:grouped_routes, %{})
       |> assign(:stats, %{total: 0, enabled: 0, disabled: 0, disabled_ratio: 0.0})
       |> assign(:connected, connected?(socket))
-      |> assign(:loading, %{})
+      |> assign(:search_query, "")
+      |> assign(:group_by_controller, true)
+      |> assign(:selected_keys, MapSet.new())
+      |> assign(:audit_entries, [])
+      |> assign(:audit_offset, 0)
+      |> assign(:audit_total, 0)
+      |> assign(:audit_expanded, false)
+      |> assign(:console_path, "/admin/api-console")
 
     {:ok, load_dashboard(socket)}
   end
 
+  # --- Single toggle ---
+
   @impl true
   def handle_event("toggle", %{"key" => key}, socket) do
-    Logger.debug("[ApiConsole] toggle event — key=#{key}")
-
     route = find_route(socket.assigns.grouped_routes, key)
 
     if route && route.mutable do
-      RoutePolicies.set_route_enabled(key, not route.enabled)
+      new_state = not route.enabled
+      RoutePolicies.set_route_enabled(key, new_state)
+      AuditLog.append("admin", "toggle", key, route.enabled, new_state)
     end
 
-    {:noreply, load_dashboard(socket)}
+    {:noreply, load_dashboard(socket) |> clear_selection()}
   end
 
-  def handle_event("toggle_group", %{"group" => group}, socket) do
-    Logger.debug("[ApiConsole] toggle_group event — group=#{group}")
+  # --- Group toggle ---
 
+  def handle_event("toggle_group", %{"group" => group}, socket) do
     routes = Map.get(socket.assigns.grouped_routes, group, [])
     mutable = Enum.filter(routes, & &1.mutable)
 
     if mutable != [] do
       disable_all? = Enum.all?(mutable, & &1.enabled)
-      RoutePolicies.set_group_enabled(socket.router, group, not disable_all?)
+      new_state = not disable_all?
+      RoutePolicies.set_group_enabled(socket.router, group, new_state)
+
+      Enum.each(mutable, fn r ->
+        AuditLog.append("admin", "toggle_group", "#{group}/*", r.enabled, new_state)
+      end)
     end
 
-    {:noreply, load_dashboard(socket)}
+    {:noreply, load_dashboard(socket) |> clear_selection()}
   end
+
+  # --- Search ---
+
+  def handle_event("search", %{"value" => query}, socket) do
+    {:noreply, socket |> assign(:search_query, query) |> apply_search()}
+  end
+
+  # --- Bulk selection ---
+
+  def handle_event("select", %{"key" => key}, socket) do
+    selected =
+      if MapSet.member?(socket.assigns.selected_keys, key) do
+        MapSet.delete(socket.assigns.selected_keys, key)
+      else
+        MapSet.put(socket.assigns.selected_keys, key)
+      end
+
+    {:noreply, assign(socket, :selected_keys, selected)}
+  end
+
+  def handle_event("select_all", %{"group" => group}, socket) do
+    routes = Map.get(socket.assigns.filtered_routes || socket.assigns.grouped_routes, group, [])
+    keys = Enum.filter(routes, & &1.mutable) |> Enum.map(& &1.key)
+    {:noreply, assign(socket, :selected_keys, MapSet.union(socket.assigns.selected_keys, MapSet.new(keys)))}
+  end
+
+  def handle_event("select_all", _params, socket) do
+    all_keys = mutable_keys(socket.assigns.filtered_routes || socket.assigns.grouped_routes)
+    {:noreply, assign(socket, :selected_keys, MapSet.new(all_keys))}
+  end
+
+  def handle_event("deselect_group", %{"group" => group}, socket) do
+    routes = Map.get(socket.assigns.filtered_routes || socket.assigns.grouped_routes, group, [])
+    keys = Enum.filter(routes, & &1.mutable) |> Enum.map(& &1.key) |> MapSet.new()
+    {:noreply, assign(socket, :selected_keys, MapSet.difference(socket.assigns.selected_keys, keys))}
+  end
+
+  def handle_event("deselect_all", _params, socket) do
+    {:noreply, assign(socket, :selected_keys, MapSet.new())}
+  end
+
+  def handle_event("bulk_enable", _params, socket) do
+    updates = Enum.map(socket.assigns.selected_keys, &{&1, true})
+    RoutePolicies.Store.bulk_put(updates)
+
+    Enum.each(socket.assigns.selected_keys, fn key ->
+      AuditLog.append("admin", "bulk_enable", key, nil, true)
+    end)
+
+    {:noreply, load_dashboard(socket) |> clear_selection()}
+  end
+
+  def handle_event("bulk_disable", _params, socket) do
+    updates = Enum.map(socket.assigns.selected_keys, &{&1, false})
+    RoutePolicies.Store.bulk_put(updates)
+
+    Enum.each(socket.assigns.selected_keys, fn key ->
+      AuditLog.append("admin", "bulk_disable", key, nil, false)
+    end)
+
+    {:noreply, load_dashboard(socket) |> clear_selection()}
+  end
+
+  # --- Grouping toggle ---
+
+  def handle_event("toggle_grouping", _params, socket) do
+    {:noreply, socket |> assign(:group_by_controller, not socket.assigns.group_by_controller) |> apply_search()}
+  end
+
+  # --- Audit log ---
+
+  def handle_event("toggle_audit", _params, socket) do
+    if socket.assigns.audit_expanded do
+      {:noreply, assign(socket, :audit_expanded, false)}
+    else
+      {entries, total} = AuditLog.list(offset: 0, limit: @page_size)
+      {:noreply, assign(socket, audit_expanded: true, audit_entries: entries, audit_offset: @page_size, audit_total: total)}
+    end
+  end
+
+  def handle_event("load_more_audit", _params, socket) do
+    {entries, total} = AuditLog.list(offset: socket.assigns.audit_offset, limit: @page_size)
+    all = socket.assigns.audit_entries ++ entries
+    {:noreply, assign(socket, audit_entries: all, audit_offset: socket.assigns.audit_offset + @page_size, audit_total: total)}
+  end
+
+  # --- Dead render fallback (query params) ---
 
   @impl true
   def handle_params(%{"toggle" => key}, uri, socket) do
-    Logger.debug("[ApiConsole] toggle — key=#{key}")
-
     route = find_route(socket.assigns.grouped_routes, key)
 
     if route && route.mutable do
-      RoutePolicies.set_route_enabled(key, not route.enabled)
+      new_state = not route.enabled
+      RoutePolicies.set_route_enabled(key, new_state)
+      AuditLog.append("admin", "toggle", key, route.enabled, new_state)
     end
 
     clean_path = URI.parse(uri).path
@@ -79,8 +184,6 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
   end
 
   def handle_params(%{"toggle_group" => group}, uri, socket) do
-    Logger.debug("[ApiConsole] toggle_group — group=#{group}")
-
     routes = Map.get(socket.assigns.grouped_routes, group, [])
     mutable = Enum.filter(routes, & &1.mutable)
 
@@ -97,7 +200,11 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
      |> push_patch(to: clean_path, replace: true)}
   end
 
-  def handle_params(_params, _uri, socket), do: {:noreply, socket}
+  def handle_params(_params, uri, socket) do
+    {:noreply, assign(socket, :console_path, URI.parse(uri).path)}
+  end
+
+  # --- Render ---
 
   @impl true
   def render(assigns) do
@@ -105,13 +212,11 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
     <div class="console-root">
       <style>
         html, body { background: #fff !important; }
-        .console-root { font-family: system-ui, sans-serif; max-width: 960px; margin: 2rem auto; padding: 0 1rem; background: #fff; }
+        .console-root { font-family: system-ui, sans-serif; max-width: 960px; margin: 2rem auto; padding: 0 1rem 6rem 1rem; background: #fff; }
         @media (prefers-color-scheme: dark) {
           html, body { background: #0f172a !important; }
           .console-root { background: #0f172a; color: #e2e8f0; }
           .console-card { background: #1e293b !important; border-color: #334155 !important; }
-          .console-card-muted { background: #1e293b !important; border-color: #334155 !important; }
-          .console-text-muted { color: #94a3b8 !important; }
           .console-group-card { background: #1e293b !important; border-color: #334155 !important; }
           .console-route-enabled { background: #052e16 !important; border-color: #166534 !important; }
           .console-route-disabled { background: #450a0a !important; border-color: #7f1d1d !important; }
@@ -120,6 +225,13 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
           .console-stat-label { color: #94a3b8 !important; }
           .console-powered-by { color: #475569 !important; }
           .console-progress-bg { background: #334155 !important; }
+          .console-search { background: #1e293b !important; border-color: #334155 !important; color: #e2e8f0 !important; }
+          .console-group-btn { background: #1e293b !important; border-color: #475569 !important; color: #e2e8f0 !important; }
+          .console-audit-panel { background: #1e293b !important; border-color: #334155 !important; }
+          .console-audit-toggle { background: #1e293b !important; color: #e2e8f0 !important; }
+          .console-audit-toggle:hover { background: #334155 !important; }
+          .console-bulk-bar { background: #1e3a5f !important; border-color: #3b82f6 !important; }
+          .console-audit-row { border-color: #334155 !important; }
         }
         .console-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 24px; padding: 1.5rem; margin-bottom: 1.5rem; }
         .console-header-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 1rem; }
@@ -132,14 +244,13 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
         .console-progress { width: 100%; height: 6px; border-radius: 3px; margin-top: 1rem; overflow: hidden; display: flex; }
         .console-progress-bg { background: #e5e7eb; flex: 1; border-radius: 3px; overflow: hidden; }
         .console-progress-fill { height: 100%; background: #166534; border-radius: 3px; transition: width 0.3s ease; }
-        .console-progress-fill-danger { height: 100%; background: #991b1b; border-radius: 3px; transition: width 0.3s ease; }
         .console-group-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 24px; padding: 1.25rem; margin-bottom: 1rem; }
         .console-group-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
         .console-group-name { font-size: 1.1rem; font-weight: 600; margin: 0; }
         .console-group-count { font-size: 0.75rem; color: #6b7280; }
-        .console-group-btn { border: 1px solid #d1d5db; border-radius: 999px; padding: 0.5rem 1rem; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; background: #fff; cursor: pointer; transition: all 0.15s; color: #374151; text-decoration: none; display: inline-block; }
+        .console-group-btn { border: 1px solid #d1d5db; border-radius: 999px; padding: 0.5rem 1rem; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; background: #fff; cursor: pointer; transition: all 0.15s; color: #374151; text-decoration: none; display: inline-block; }
         .console-group-btn:hover { border-color: #3b82f6; color: #2563eb; }
-        .console-route-row { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem; border-radius: 16px; border: 1px solid; margin-bottom: 0.5rem; transition: all 0.15s; }
+        .console-route-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; border-radius: 16px; border: 1px solid; margin-bottom: 0.5rem; transition: all 0.15s; }
         .console-route-enabled { border-color: #bbf7d0; background: #f0fdf4; }
         .console-route-disabled { border-color: #fecaca; background: #fef2f2; }
         .console-route-immutable { border-color: #e5e7eb; background: #f9fafb; opacity: 0.6; }
@@ -147,7 +258,6 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
         .console-route-meta { display: flex; align-items: center; gap: 0.5rem; }
         .console-method-badge { background: #e5e7eb; padding: 2px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; }
         .console-route-path { font-size: 0.875rem; font-weight: 500; margin: 0.25rem 0 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .console-route-plug { font-size: 0.75rem; color: #9ca3af; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .console-toggle { position: relative; width: 64px; height: 32px; border-radius: 16px; border: 1px solid; cursor: pointer; transition: all 0.3s; flex-shrink: 0; text-decoration: none; display: inline-block; padding: 0; }
         .console-toggle-on { background: #166534; border-color: #15803d; }
         .console-toggle-off { background: #991b1b; border-color: #b91c1c; }
@@ -159,6 +269,30 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
         .console-connection-badge { font-size: 0.65rem; font-weight: 600; padding: 2px 8px; border-radius: 4px; margin-left: 0.5rem; vertical-align: middle; }
         .console-connection-live { background: #166534; color: #fff; }
         .console-connection-static { background: #b45309; color: #fff; }
+        .console-search { width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #e5e7eb; border-radius: 12px; font-size: 0.875rem; outline: none; margin-bottom: 1rem; }
+        .console-search:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.15); }
+        .console-checkbox { width: 18px; height: 18px; cursor: pointer; accent-color: #3b82f6; flex-shrink: 0; }
+        .console-select-all { font-size: 0.75rem; color: #3b82f6; cursor: pointer; border: none; background: none; padding: 0; text-decoration: underline; }
+        .console-bulk-bar { position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%); background: #fff; border: 1px solid #3b82f6; border-radius: 16px; padding: 0.75rem 1.5rem; display: flex; align-items: center; gap: 1rem; box-shadow: 0 4px 24px rgba(0,0,0,0.12); z-index: 100; font-size: 0.875rem; }
+        .console-bulk-btn { border: none; border-radius: 8px; padding: 0.4rem 0.75rem; font-size: 0.75rem; font-weight: 600; cursor: pointer; }
+        .console-bulk-enable { background: #166534; color: #fff; }
+        .console-bulk-disable { background: #991b1b; color: #fff; }
+        .console-bulk-clear { background: #e5e7eb; color: #374151; }
+        .console-audit-panel { border: 1px solid #e5e7eb; border-radius: 16px; margin-bottom: 1.5rem; overflow: hidden; }
+        .console-audit-toggle { width: 100%; padding: 0.75rem 1rem; text-align: left; background: #f3f4f6; border: none; cursor: pointer; font-weight: 600; font-size: 0.9rem; display: flex; justify-content: space-between; align-items: center; color: #374151; }
+        .console-audit-toggle:hover { background: #e5e7eb; }
+        .console-audit-body { padding: 0.75rem 1rem 1rem 1rem; }
+        .console-audit-row { display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0; border-bottom: 1px solid #f1f5f9; font-size: 0.8rem; gap: 1rem; }
+        .console-audit-row:last-child { border-bottom: none; }
+        .console-audit-left { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+        .console-audit-route { font-family: monospace; font-size: 0.75rem; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .console-audit-badge { padding: 2px 8px; border-radius: 4px; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; flex-shrink: 0; }
+        .console-audit-badge-on { background: #dcfce7; color: #166534; }
+        .console-audit-badge-off { background: #fee2e2; color: #991b1b; }
+        .console-audit-arrow { color: #9ca3af; font-size: 0.7rem; margin: 0 2px; }
+        .console-audit-time { color: #9ca3af; font-size: 0.7rem; flex-shrink: 0; }
+        .console-audit-download { font-size: 0.75rem; color: #3b82f6; cursor: pointer; border: none; background: none; padding: 0; margin-left: 0.75rem; text-decoration: none; }
+        .console-audit-download:hover { text-decoration: underline; }
       </style>
 
       <div class="console-card">
@@ -169,6 +303,13 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
               <span class={"console-connection-badge " <> if(@connected, do: "console-connection-live", else: "console-connection-static")}>
                 <%= if @connected, do: "LIVE", else: "STATIC" %>
               </span>
+              <button
+                phx-click="toggle_grouping"
+                class="console-group-btn"
+                style="margin-left:0.5rem;font-size:0.65rem;padding:0.25rem 0.5rem;"
+              >
+                <%= if @group_by_controller, do: "Grouped", else: "Flat" %>
+              </button>
             </h1>
             <p class="console-subtitle">Control route availability in real time.</p>
           </div>
@@ -191,29 +332,50 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
           </div>
         <% end %>
 
+        <input
+          type="text"
+          placeholder="Search routes by path, method, or controller..."
+          phx-keyup="search"
+          phx-debounce="200"
+          value={@search_query}
+          class="console-search"
+        />
+
+        <%= if Enum.count(@selected_keys) > 0 do %>
+          <div style="display:flex;align-items:center;gap:0.5rem;margin-top:0.5rem;">
+            <span class="console-stat-label"><%= Enum.count(@selected_keys) %> selected</span>
+            <button phx-click="deselect_all" class="console-select-all">Clear</button>
+          </div>
+        <% end %>
+
         <%= if not @connected do %>
           <p style="margin-top:1rem; font-size:0.8rem; color:#b45309; background:#fef3c7; padding:0.5rem 0.75rem; border-radius:6px;">
-            💡 Toggles work but cause a page reload. For instant toggles, ensure your app loads LiveView&rsquo;s JavaScript client.
+            💡 Toggles work but cause a page reload. For instant toggles, add LiveView JS to your app.
           </p>
         <% end %>
       </div>
 
-      <%= for {group, routes} <- @grouped_routes do %>
-        <% mutable_count = Enum.count(routes, & &1.mutable) %>
+      <%= for {group, routes} <- @filtered_routes || @grouped_routes do %>
+        <% mutable_in_group = Enum.filter(routes, & &1.mutable) %>
         <div class="console-group-card">
           <div class="console-group-header">
             <div>
               <h2 class="console-group-name"><%= group %></h2>
               <span class="console-group-count"><%= Enum.count(routes) %> routes</span>
             </div>
-            <%= if mutable_count > 0 do %>
-              <button phx-click="toggle_group" phx-value-group={group} class="console-group-btn">
-                Toggle Group
-              </button>
-            <% end %>
+            <div style="display:flex;align-items:center;gap:0.5rem;">
+              <button phx-click="select_all" phx-value-group={group} class="console-select-all">Select All</button>
+              <button phx-click="deselect_group" phx-value-group={group} class="console-select-all">Clear</button>
+              <%= if Enum.count(mutable_in_group) > 0 do %>
+                <button phx-click="toggle_group" phx-value-group={group} class="console-group-btn">
+                  Toggle Group
+                </button>
+              <% end %>
+            </div>
           </div>
 
           <%= for route <- routes do %>
+            <% selected = MapSet.member?(@selected_keys, route.key) %>
             <div class={
               "console-route-row " <>
               cond do
@@ -222,6 +384,15 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
                 true -> "console-route-disabled"
               end
             }>
+              <input
+                :if={route.mutable}
+                type="checkbox"
+                class="console-checkbox"
+                checked={selected}
+                phx-click="select"
+                phx-value-key={route.key}
+              />
+
               <div class="console-route-left">
                 <div class="console-route-meta">
                   <span class="console-method-badge"><%= route.method %></span>
@@ -246,6 +417,59 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
         </div>
       <% end %>
 
+      <div class="console-audit-panel">
+        <button phx-click="toggle_audit" class="console-audit-toggle">
+          <span>
+            📋 Audit Log
+            <a href={"#{@console_path}/audit.csv"} class="console-audit-download">Download CSV</a>
+          </span>
+          <span><%= if @audit_expanded, do: "▲", else: "▼" %></span>
+        </button>
+
+        <%= if @audit_expanded do %>
+          <div class="console-audit-body">
+            <%= for entry <- @audit_entries do %>
+              <div class="console-audit-row">
+                <div class="console-audit-left">
+                  <span class={"console-audit-badge " <> if(entry.old_state, do: "console-audit-badge-on", else: "console-audit-badge-off")}>
+                    <%= if entry.old_state, do: "ON", else: "OFF" %>
+                  </span>
+                  <span class="console-audit-arrow">→</span>
+                  <span class={"console-audit-badge " <> if(entry.new_state, do: "console-audit-badge-on", else: "console-audit-badge-off")}>
+                    <%= if entry.new_state, do: "ON", else: "OFF" %>
+                  </span>
+                  <span class="console-audit-route"><%= entry.key %></span>
+                </div>
+                <span class="console-audit-time"><%= entry.timestamp %></span>
+              </div>
+            <% end %>
+
+            <%= if @audit_offset < @audit_total do %>
+              <button
+                phx-click="load_more_audit"
+                class="console-group-btn"
+                style="margin-top:0.75rem;display:block;width:100%;text-align:center;"
+              >
+                Load more (<%= @audit_total - @audit_offset %> remaining)
+              </button>
+            <% end %>
+
+            <%= if @audit_entries == [] do %>
+              <p class="console-stat-label" style="text-align:center;padding:1rem;">No audit entries yet.</p>
+            <% end %>
+          </div>
+        <% end %>
+      </div>
+
+      <%= if Enum.count(@selected_keys) > 0 do %>
+        <div class="console-bulk-bar">
+          <span><strong><%= Enum.count(@selected_keys) %></strong> routes selected</span>
+          <button phx-click="bulk_enable" class="console-bulk-btn console-bulk-enable">Enable All</button>
+          <button phx-click="bulk_disable" class="console-bulk-btn console-bulk-disable">Disable All</button>
+          <button phx-click="deselect_all" class="console-bulk-btn console-bulk-clear">✕</button>
+        </div>
+      <% end %>
+
       <p class="console-powered-by">Powered by API Management Console</p>
     </div>
     """
@@ -263,13 +487,51 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
         _ -> %{}
       end
 
-    stats = compute_stats(grouped_routes)
-
-    Logger.debug("[ApiConsole] load — groups=#{map_size(grouped_routes)}, total=#{stats.total}, enabled=#{stats.enabled}, disabled=#{stats.disabled}")
-
     socket
     |> assign(:grouped_routes, grouped_routes)
-    |> assign(:stats, stats)
+    |> assign(:stats, compute_stats(grouped_routes))
+    |> apply_search()
+  end
+
+  defp apply_search(socket) do
+    query = String.trim(socket.assigns.search_query)
+    grouped = socket.assigns.grouped_routes
+
+    {all_routes, filtered} =
+      if query == "" do
+        {grouped, grouped}
+      else
+        filtered =
+          Enum.reduce(grouped, %{}, fn {group, routes}, acc ->
+            matching = Enum.filter(routes, fn r ->
+              String.contains?(String.downcase(r.path), String.downcase(query)) or
+                String.contains?(String.downcase(r.method), String.downcase(query)) or
+                String.contains?(String.downcase(to_string(r.controller)), String.downcase(query))
+            end)
+
+            if matching != [], do: Map.put(acc, group, matching), else: acc
+          end)
+
+        {grouped, filtered}
+      end
+
+    final =
+      if socket.assigns.group_by_controller do
+        filtered
+      else
+        flat = Map.values(filtered) |> List.flatten()
+        if flat == [], do: %{}, else: %{"All Routes" => flat}
+      end
+
+    Logger.debug("[ApiConsole] search — query=#{inspect(query)}, groups=#{map_size(final)}, total=#{stats_for(final).total}")
+
+    socket
+    |> assign(:filtered_routes, final)
+    |> assign(:stats, stats_for(all_routes))
+  end
+
+  defp stats_for(grouped_routes) do
+    compute_stats(grouped_routes)
   end
 
   defp compute_stats(grouped_routes) do
@@ -292,5 +554,17 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
     |> Map.values()
     |> List.flatten()
     |> Enum.find(&(&1.key == key))
+  end
+
+  defp clear_selection(socket) do
+    assign(socket, :selected_keys, MapSet.new())
+  end
+
+  defp mutable_keys(grouped_routes) do
+    grouped_routes
+    |> Map.values()
+    |> List.flatten()
+    |> Enum.filter(& &1.mutable)
+    |> Enum.map(& &1.key)
   end
 end
