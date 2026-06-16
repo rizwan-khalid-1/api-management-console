@@ -38,17 +38,13 @@
 
 ---
 
-## Phase 4 — Next Steps
+## ✅ Phase 4 — Done
 
-### 1. Replace DETS with CubDB
+1. Replace DETS with CubDB — ACID transactions, crash-safe, concurrent reads, zero config
 
-Switch storage backend from DETS to [CubDB](https://github.com/lucaong/cubdb) (~> 2.0).
+## Phase 5 — Next Steps
 
-- **Why:** ACID transactions, crash-safe, concurrent reads (MVCC), auto-compaction. DETS can corrupt on crash and blocks on writes.
-- **Files to change:** Only `RoutePolicies.Store` and `AuditLog.Store` — the abstraction is already in place.
-- **Effort:** Medium
-
-### 2. Licensing Module (Offline JWT)
+### 1. Licensing Module (Offline JWT)
 
 Add license key validation using signed JWT tokens. No phone-home, no external server.
 

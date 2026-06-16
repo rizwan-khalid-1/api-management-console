@@ -2,7 +2,7 @@ defmodule ApiManagementConsoleV2.AuditLog do
   @moduledoc """
   Action log for every route toggle — who did what, when, old→new state.
 
-  Storage is swappable via `AuditLog.Store`. Currently DETS-backed.
+  Storage is swappable via `AuditLog.Store`. Currently CubDB-backed.
   Same pattern as `RoutePolicies.Store` — will support PostgreSQL later.
 
   ## Usage

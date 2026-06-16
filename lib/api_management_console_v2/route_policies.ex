@@ -86,7 +86,8 @@ defmodule ApiManagementConsoleV2.RoutePolicies do
 
   @impl true
   def init(_opts) do
-    _ = File.mkdir_p!("tmp")
+    Store.start_link()
+    ApiManagementConsoleV2.AuditLog.Store.start_link()
     {:ok, nil}
   end
 

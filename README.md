@@ -12,7 +12,7 @@ A Phoenix LiveView library that gives you real-time control over your backend ro
 - **Grouped Management** — Routes organized by namespace/module so you can toggle in bulk
 - **One-Click Toggles** — Enable or disable individual routes or entire groups instantly
 - **Guard Plug Enforcement** — Disabled routes return `403` at the Plug level, before they hit your controller
-- **Persistent State** — Route policy stored locally via DETS (swap to PostgreSQL or Redis for multi-node)
+- **Persistent State** — Route policy stored locally via CubDB (embedded key-value store, crash-safe)
 - **Protected Console** — Admin dashboard behind Basic Auth so only you can make changes
 
 ---
@@ -174,7 +174,7 @@ $ mix phx.server
 - **One-Click Toggles** — enable/disable individual routes or entire groups
 - **Route Guard** — blocks disabled routes with 403 at the Plug level
 - **Basic Auth** — HTTP Basic Auth protects the console (configurable via env vars)
-- **DETS Storage** — persistent local storage, survives restarts
+- **CubDB Storage** — embedded key-value store, crash-safe, ACID transactions
 - **Grouped Routes** — routes organized by controller name, toggleable to flat view
 - **Search & Filter** — instant search by path, method, or controller name
 - **Health Bar** — visual progress bar showing enabled vs disabled ratio
@@ -209,7 +209,7 @@ $ mix phx.server
 
 | Storage | Use Case | Tier |
 |---|---|---|
-| DETS | Default — single node, zero config | Free |
+| CubDB | Default — embedded, zero config, crash-safe | Free |
 | PostgreSQL | Multi-node consistency, team environments | Pro |
 | Redis | High performance, caching layer | Enterprise |
 

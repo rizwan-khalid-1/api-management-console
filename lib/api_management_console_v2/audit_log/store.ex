@@ -3,74 +3,39 @@ defmodule ApiManagementConsoleV2.AuditLog.Store do
 
   require Logger
 
-  defp dets_file do
+  @db_name :api_audit_db
+
+  defp data_dir do
     dir = Application.get_env(:api_management_console, :storage_dir, "tmp")
-    Path.join(dir, "api_audit.dets")
+    Path.join(dir, "api_audit")
   end
 
-  # Counter key for auto-incrementing IDs
-  @counter_key :__audit_counter__
-
-  defp table do
-    case :dets.open_file(String.to_charlist(dets_file()), type: :set) do
-      {:ok, ref} -> ref
-      {:error, reason} -> raise "Failed to open audit DETS: #{inspect(reason)}"
-    end
+  def start_link(_opts \\ []) do
+    CubDB.start_link(data_dir: data_dir(), name: @db_name)
   end
 
   def append(entry) do
-    ref = table()
-    id = next_id(ref)
-    :dets.insert(ref, {counter_id(), id})
-    :dets.insert(ref, {id, entry})
-    :dets.sync(ref)
-    :dets.close(ref)
+    # Use timestamp + random suffix as unique key
+    key = "#{System.system_time(:millisecond)}_#{:rand.uniform(999_999)}"
+    CubDB.put(@db_name, key, entry)
 
-    Logger.debug("[AuditStore] append — id=#{id}, key=#{entry.key}, #{entry.old_state} → #{entry.new_state}")
+    Logger.debug("[AuditStore] append — key=#{entry.key}, #{entry.old_state} → #{entry.new_state}")
     :ok
   end
 
   def list(offset, limit) do
-    ref = table()
-    total = current_count(ref)
-
     entries =
-      ref
-      |> :dets.match({:"$1", :"$2"})
-      |> Enum.reject(fn [k, _v] -> k == counter_id() end)
-      |> Enum.sort_by(fn [id, _] -> id end, :desc)
-      |> Enum.drop(offset)
-      |> Enum.take(limit)
-      |> Enum.map(fn [_id, entry] -> entry end)
+      CubDB.select(@db_name, reverse: true)
+      |> Stream.drop(offset)
+      |> Stream.take(limit)
+      |> Stream.map(fn {_key, entry} -> entry end)
+      |> Enum.to_list()
 
-    :dets.close(ref)
+    total = CubDB.size(@db_name)
     {entries, total}
   end
 
   def count do
-    ref = table()
-    c = current_count(ref)
-    :dets.close(ref)
-    c
-  end
-
-  # --- Private ---
-
-  defp counter_id, do: @counter_key
-
-  defp next_id(ref) do
-    case :dets.lookup(ref, counter_id()) do
-      [{_k, n}] ->
-        n + 1
-      [] ->
-        1
-    end
-  end
-
-  defp current_count(ref) do
-    case :dets.lookup(ref, counter_id()) do
-      [{_k, n}] -> n
-      [] -> 0
-    end
+    CubDB.size(@db_name)
   end
 end

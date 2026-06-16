@@ -3,103 +3,76 @@ defmodule ApiManagementConsoleV2.RoutePolicies.Store do
 
   require Logger
 
+  @db_name :api_policies_db
   @hidden_prefix "__hidden__"
 
-  defp dets_file do
+  defp data_dir do
     dir = Application.get_env(:api_management_console, :storage_dir, "tmp")
-    Path.join(dir, "api_policies.dets")
+    Path.join(dir, "api_policies")
   end
 
-  defp table do
-    case :dets.open_file(String.to_charlist(dets_file()), type: :set) do
-      {:ok, ref} -> ref
-      {:error, reason} -> raise "Failed to open DETS table #{dets_file()}: #{inspect(reason)}"
-    end
+  def start_link(_opts \\ []) do
+    CubDB.start_link(data_dir: data_dir(), name: @db_name)
   end
 
   def all do
-    ref = table()
-    result = :dets.match(ref, {:"$1", :"$2"})
-    :dets.close(ref)
-    result |> Enum.reject(fn [k, _] -> String.starts_with?(k, @hidden_prefix) end)
-      |> Enum.map(fn [k, v] -> {k, v} end)
+    CubDB.select(@db_name)
+    |> Stream.reject(fn {k, _} -> is_binary(k) and String.starts_with?(k, @hidden_prefix) end)
+    |> Enum.to_list()
   rescue
     _ -> []
   end
 
   def put(key, enabled) do
     Logger.debug("[ApiStore] put — key=#{key}, enabled=#{enabled}")
-    ref = table()
-    :dets.insert(ref, {key, enabled})
-    :dets.sync(ref)
-    :dets.close(ref)
+    CubDB.put(@db_name, key, enabled)
     :ok
   end
 
   def bulk_put(updates) when is_list(updates) do
-    ref = table()
-    Enum.each(updates, fn {k, v} -> :dets.insert(ref, {k, v}) end)
-    :dets.sync(ref)
-    :dets.close(ref)
+    CubDB.put_multi(@db_name, Map.new(updates))
     :ok
   end
 
   def reset_all do
-    File.rm(dets_file())
+    CubDB.clear(@db_name)
     :ok
   end
 
   def enabled?(key) do
-    ref = table()
-
-    result = case :dets.lookup(ref, key) do
-      [{_key, enabled}] -> enabled
-      [] -> true
+    case CubDB.get(@db_name, key) do
+      nil -> true
+      enabled -> enabled
     end
-
-    :dets.close(ref)
-    Logger.debug("[ApiStore] enabled? — key=#{key}, result=#{result}")
-    result
   rescue
-    e ->
-      Logger.debug("[ApiStore] enabled? — key=#{key}, error=#{inspect(e)}, defaulting to true")
-      true
+    _ -> true
   end
 
   def hide(keys) when is_list(keys) do
-    ref = table()
-    Enum.each(keys, fn k -> :dets.insert(ref, {hidden_key(k), true}) end)
-    :dets.sync(ref)
-    :dets.close(ref)
+    updates = Map.new(keys, fn k -> {hidden_key(k), true} end)
+    CubDB.put_multi(@db_name, updates)
     :ok
   end
 
   def show(keys) when is_list(keys) do
-    ref = table()
-    Enum.each(keys, fn k -> :dets.delete(ref, hidden_key(k)) end)
-    :dets.sync(ref)
-    :dets.close(ref)
+    keys
+    |> Enum.each(fn k -> CubDB.delete(@db_name, hidden_key(k)) end)
     :ok
   end
 
   def hidden_keys do
-    ref = table()
-    result = :dets.match(ref, {:"$1", :_})
-      |> List.flatten()
-      |> Enum.filter(&String.starts_with?(&1, @hidden_prefix))
-      |> Enum.map(&String.replace_prefix(&1, @hidden_prefix, ""))
-    :dets.close(ref)
-    result
+    CubDB.select(@db_name)
+    |> Stream.filter(fn {k, _} -> is_binary(k) and String.starts_with?(k, @hidden_prefix) end)
+    |> Stream.map(fn {k, _} -> String.replace_prefix(k, @hidden_prefix, "") end)
+    |> Enum.to_list()
   rescue
     _ -> []
   end
 
   def hidden_count do
-    ref = table()
-    result = :dets.match(ref, {:"$1", :_})
-      |> Enum.count(fn [k] -> String.starts_with?(k, @hidden_prefix) end)
-    :dets.close(ref)
-    result
+    CubDB.select(@db_name)
+    |> Stream.filter(fn {k, _} -> is_binary(k) and String.starts_with?(k, @hidden_prefix) end)
+    |> Enum.count()
   rescue
     _ -> 0
   end
