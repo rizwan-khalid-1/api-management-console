@@ -3,13 +3,16 @@ defmodule ApiManagementConsoleV2.AuditLog.Store do
 
   require Logger
 
-  @dets_file "tmp/api_audit.dets"
+  defp dets_file do
+    dir = Application.get_env(:api_management_console, :storage_dir, "tmp")
+    Path.join(dir, "api_audit.dets")
+  end
 
   # Counter key for auto-incrementing IDs
   @counter_key :__audit_counter__
 
   defp table do
-    case :dets.open_file(String.to_charlist(@dets_file), type: :set) do
+    case :dets.open_file(String.to_charlist(dets_file()), type: :set) do
       {:ok, ref} -> ref
       {:error, reason} -> raise "Failed to open audit DETS: #{inspect(reason)}"
     end

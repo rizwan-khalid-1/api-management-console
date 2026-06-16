@@ -3,15 +3,17 @@ defmodule ApiManagementConsoleV2.RoutePolicies.Store do
 
   require Logger
 
-  @dets_file "tmp/api_policies.dets"
+  @hidden_prefix "__hidden__"
+
+  defp dets_file do
+    dir = Application.get_env(:api_management_console, :storage_dir, "tmp")
+    Path.join(dir, "api_policies.dets")
+  end
 
   defp table do
-    case :dets.open_file(String.to_charlist(@dets_file), type: :set) do
-      {:ok, ref} ->
-        ref
-
-      {:error, reason} ->
-        raise "Failed to open DETS table #{@dets_file}: #{inspect(reason)}"
+    case :dets.open_file(String.to_charlist(dets_file()), type: :set) do
+      {:ok, ref} -> ref
+      {:error, reason} -> raise "Failed to open DETS table #{dets_file()}: #{inspect(reason)}"
     end
   end
 
@@ -19,7 +21,8 @@ defmodule ApiManagementConsoleV2.RoutePolicies.Store do
     ref = table()
     result = :dets.match(ref, {:"$1", :"$2"})
     :dets.close(ref)
-    result |> Enum.map(fn [k, v] -> {k, v} end)
+    result |> Enum.reject(fn [k, _] -> String.starts_with?(k, @hidden_prefix) end)
+      |> Enum.map(fn [k, v] -> {k, v} end)
   rescue
     _ -> []
   end
@@ -41,6 +44,11 @@ defmodule ApiManagementConsoleV2.RoutePolicies.Store do
     :ok
   end
 
+  def reset_all do
+    File.rm(dets_file())
+    :ok
+  end
+
   def enabled?(key) do
     ref = table()
 
@@ -57,4 +65,44 @@ defmodule ApiManagementConsoleV2.RoutePolicies.Store do
       Logger.debug("[ApiStore] enabled? — key=#{key}, error=#{inspect(e)}, defaulting to true")
       true
   end
+
+  def hide(keys) when is_list(keys) do
+    ref = table()
+    Enum.each(keys, fn k -> :dets.insert(ref, {hidden_key(k), true}) end)
+    :dets.sync(ref)
+    :dets.close(ref)
+    :ok
+  end
+
+  def show(keys) when is_list(keys) do
+    ref = table()
+    Enum.each(keys, fn k -> :dets.delete(ref, hidden_key(k)) end)
+    :dets.sync(ref)
+    :dets.close(ref)
+    :ok
+  end
+
+  def hidden_keys do
+    ref = table()
+    result = :dets.match(ref, {:"$1", :_})
+      |> List.flatten()
+      |> Enum.filter(&String.starts_with?(&1, @hidden_prefix))
+      |> Enum.map(&String.replace_prefix(&1, @hidden_prefix, ""))
+    :dets.close(ref)
+    result
+  rescue
+    _ -> []
+  end
+
+  def hidden_count do
+    ref = table()
+    result = :dets.match(ref, {:"$1", :_})
+      |> Enum.count(fn [k] -> String.starts_with?(k, @hidden_prefix) end)
+    :dets.close(ref)
+    result
+  rescue
+    _ -> 0
+  end
+
+  defp hidden_key(key), do: @hidden_prefix <> key
 end

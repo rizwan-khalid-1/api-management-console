@@ -17,7 +17,7 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
 
   require Logger
 
-  alias ApiManagementConsoleV2.{AuditLog, RoutePolicies}
+  alias ApiManagementConsoleV2.{AuditLog, Branding, HiddenRoutes, RoutePolicies}
 
   @page_size 10
 
@@ -40,6 +40,9 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
       |> assign(:audit_total, 0)
       |> assign(:audit_expanded, false)
       |> assign(:console_path, "/admin/api-console")
+      |> assign(:show_confirm_reset, false)
+      |> assign(:show_hidden_modal, false)
+      |> assign(:hidden_routes_list, [])
 
     {:ok, load_dashboard(socket)}
   end
@@ -161,6 +164,65 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
     {entries, total} = AuditLog.list(offset: socket.assigns.audit_offset, limit: @page_size)
     all = socket.assigns.audit_entries ++ entries
     {:noreply, assign(socket, audit_entries: all, audit_offset: socket.assigns.audit_offset + @page_size, audit_total: total)}
+  end
+
+  # --- Hide routes ---
+
+  def handle_event("hide_selected", _params, socket) do
+    keys = MapSet.to_list(socket.assigns.selected_keys)
+
+    if keys != [] do
+      HiddenRoutes.hide(keys)
+      routes = socket.assigns.grouped_routes |> Map.values() |> List.flatten()
+      Enum.each(keys, fn key ->
+        route = Enum.find(routes, &(&1.key == key))
+        state = if route, do: route.enabled, else: nil
+        AuditLog.append("admin", "hide", key, state, nil)
+      end)
+    end
+
+    {:noreply, load_dashboard(socket) |> clear_selection()}
+  end
+
+  def handle_event("show_hidden_modal", _params, socket) do
+    routes = socket.assigns.grouped_routes |> Map.values() |> List.flatten()
+    hidden_keys = HiddenRoutes.all_keys()
+    hidden_routes = Enum.filter(routes, fn r -> r.key in hidden_keys end)
+    {:noreply, assign(socket, show_hidden_modal: true, hidden_routes_list: hidden_routes)}
+  end
+
+  def handle_event("close_hidden_modal", _params, socket) do
+    {:noreply, assign(socket, show_hidden_modal: false)}
+  end
+
+  def handle_event("show_route", %{"key" => key}, socket) do
+    HiddenRoutes.show([key])
+
+    routes = socket.assigns.grouped_routes |> Map.values() |> List.flatten()
+    route = Enum.find(routes, &(&1.key == key))
+    state = if route, do: route.enabled, else: nil
+    AuditLog.append("admin", "show", key, state, nil)
+
+    hidden_keys = HiddenRoutes.all_keys()
+    hidden_routes = Enum.filter(routes, fn r -> r.key in hidden_keys end)
+
+    {:noreply, load_dashboard(socket) |> assign(hidden_routes_list: hidden_routes)}
+  end
+
+  # --- Reset all ---
+
+  def handle_event("confirm_reset", _params, socket) do
+    {:noreply, assign(socket, show_confirm_reset: true)}
+  end
+
+  def handle_event("cancel_reset", _params, socket) do
+    {:noreply, assign(socket, show_confirm_reset: false)}
+  end
+
+  def handle_event("reset_all", _params, socket) do
+    RoutePolicies.reset_all()
+    AuditLog.append("admin", "reset_all", "—", "—", "—")
+    {:noreply, load_dashboard(socket) |> assign(show_confirm_reset: false)}
   end
 
   # --- Dead render fallback (query params) ---
@@ -289,17 +351,29 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
         .console-audit-badge { padding: 2px 8px; border-radius: 4px; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; flex-shrink: 0; }
         .console-audit-badge-on { background: #dcfce7; color: #166534; }
         .console-audit-badge-off { background: #fee2e2; color: #991b1b; }
+        .console-audit-badge-hidden { background: #ede9fe; color: #6b21a8; }
+        .console-audit-badge-shown { background: #dbeafe; color: #1e40af; }
+        .console-audit-badge-reset { background: #fee2e2; color: #991b1b; }
         .console-audit-arrow { color: #9ca3af; font-size: 0.7rem; margin: 0 2px; }
         .console-audit-time { color: #9ca3af; font-size: 0.7rem; flex-shrink: 0; }
         .console-audit-download { font-size: 0.75rem; color: #3b82f6; cursor: pointer; border: none; background: none; padding: 0; margin-left: 0.75rem; text-decoration: none; }
         .console-audit-download:hover { text-decoration: underline; }
+        .console-reset-btn { background: #991b1b; color: #fff; border: none; padding: 0.4rem 1rem; border-radius: 8px; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
+        .console-reset-btn:hover { background: #7f1d1d; }
+        .console-hidden-count { color: #8b5cf6; cursor: pointer; border: none; background: none; padding: 0; font-size: 0.875rem; font-weight: 600; text-decoration: underline; }
+        .console-hidden-count:hover { color: #7c3aed; }
+        .console-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 200; }
+        .console-modal { background: #fff; border-radius: 16px; padding: 1.5rem; min-width: 400px; max-width: 600px; max-height: 80vh; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
+        @media (prefers-color-scheme: dark) {
+          .console-modal { background: #1e293b; color: #e2e8f0; }
+        }
       </style>
 
       <div class="console-card">
         <div class="console-header-row">
           <div>
             <h1 class="console-title">
-              API Management Console
+              <%= Branding.app_name() %>
               <span class={"console-connection-badge " <> if(@connected, do: "console-connection-live", else: "console-connection-static")}>
                 <%= if @connected, do: "LIVE", else: "STATIC" %>
               </span>
@@ -318,6 +392,9 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
               <span class="console-stat-enabled"><%= @stats.enabled %> enabled</span>
               <%= if @stats.disabled > 0 do %>
                 / <span class="console-stat-disabled"><%= @stats.disabled %> disabled</span>
+              <% end %>
+              <%= if @stats.hidden > 0 do %>
+                / <button phx-click="show_hidden_modal" class="console-hidden-count"><%= @stats.hidden %> hidden</button>
               <% end %>
             </div>
             <span class="console-stat-label"><%= @stats.total %> total mutable routes</span>
@@ -353,6 +430,12 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
             💡 Toggles work but cause a page reload. For instant toggles, add LiveView JS to your app.
           </p>
         <% end %>
+
+        <div style="display:flex;align-items:center;gap:0.5rem;margin-top:0.75rem;">
+          <button phx-click="confirm_reset" class="console-reset-btn" title="This will re-enable ALL disabled routes. This cannot be undone.">
+            ⚠ Reset All Policies
+          </button>
+        </div>
       </div>
 
       <%= for {group, routes} <- @filtered_routes || @grouped_routes do %>
@@ -431,13 +514,24 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
             <%= for entry <- @audit_entries do %>
               <div class="console-audit-row">
                 <div class="console-audit-left">
-                  <span class={"console-audit-badge " <> if(entry.old_state, do: "console-audit-badge-on", else: "console-audit-badge-off")}>
-                    <%= if entry.old_state, do: "ON", else: "OFF" %>
-                  </span>
-                  <span class="console-audit-arrow">→</span>
-                  <span class={"console-audit-badge " <> if(entry.new_state, do: "console-audit-badge-on", else: "console-audit-badge-off")}>
-                    <%= if entry.new_state, do: "ON", else: "OFF" %>
-                  </span>
+                  <%= if entry.action in ["hide", "show"] do %>
+                    <span class={"console-audit-badge " <> if(entry.action == "hide", do: "console-audit-badge-hidden", else: "console-audit-badge-shown")}>
+                      <%= String.upcase(entry.action) %>
+                    </span>
+                    <span class="console-stat-label"><%= if entry.old_state, do: "ON", else: "OFF" %></span>
+                  <% else %>
+                    <%= if entry.action == "reset_all" do %>
+                      <span class="console-audit-badge console-audit-badge-reset">RESET ALL</span>
+                    <% else %>
+                      <span class={"console-audit-badge " <> if(entry.old_state, do: "console-audit-badge-on", else: "console-audit-badge-off")}>
+                        <%= if entry.old_state, do: "ON", else: "OFF" %>
+                      </span>
+                      <span class="console-audit-arrow">→</span>
+                      <span class={"console-audit-badge " <> if(entry.new_state, do: "console-audit-badge-on", else: "console-audit-badge-off")}>
+                        <%= if entry.new_state, do: "ON", else: "OFF" %>
+                      </span>
+                    <% end %>
+                  <% end %>
                   <span class="console-audit-route"><%= entry.key %></span>
                 </div>
                 <span class="console-audit-time"><%= entry.timestamp %></span>
@@ -466,12 +560,50 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
           <span><strong><%= Enum.count(@selected_keys) %></strong> routes selected</span>
           <button phx-click="bulk_enable" class="console-bulk-btn console-bulk-enable">Enable All</button>
           <button phx-click="bulk_disable" class="console-bulk-btn console-bulk-disable">Disable All</button>
+          <button phx-click="hide_selected" class="console-bulk-btn console-bulk-clear">Hide</button>
           <button phx-click="deselect_all" class="console-bulk-btn console-bulk-clear">✕</button>
         </div>
       <% end %>
 
-      <p class="console-powered-by">Powered by API Management Console</p>
+      <p class="console-powered-by"><%= if not Branding.hide_powered_by?, do: "Powered by API Management Console" %></p>
     </div>
+
+    <%= if @show_confirm_reset do %>
+      <div class="console-modal-overlay">
+        <div class="console-modal">
+          <h3>⚠ Reset All Policies?</h3>
+          <p>This will re-enable ALL disabled routes. This action cannot be undone.</p>
+          <div style="display:flex;gap:0.5rem;margin-top:1rem;justify-content:flex-end;">
+            <button phx-click="cancel_reset" class="console-group-btn">Cancel</button>
+            <button phx-click="reset_all" class="console-bulk-btn console-bulk-disable">Yes, Reset All</button>
+          </div>
+        </div>
+      </div>
+    <% end %>
+
+    <%= if @show_hidden_modal do %>
+      <div class="console-modal-overlay" phx-click="close_hidden_modal">
+        <div class="console-modal" phx-click-away="close_hidden_modal">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+            <h3>Hidden Routes</h3>
+            <button phx-click="close_hidden_modal" style="border:none;background:none;cursor:pointer;font-size:1.2rem;">✕</button>
+          </div>
+          <%= if @hidden_routes_list == [] do %>
+            <p class="console-stat-label">No hidden routes.</p>
+          <% else %>
+            <%= for route <- @hidden_routes_list do %>
+              <div class="console-audit-row">
+                <div class="console-audit-left">
+                  <span class="console-method-badge"><%= route.method %></span>
+                  <span class="console-audit-route"><%= route.path %></span>
+                </div>
+                <button phx-click="show_route" phx-value-key={route.key} class="console-bulk-btn console-bulk-enable">Show</button>
+              </div>
+            <% end %>
+          <% end %>
+        </div>
+      </div>
+    <% end %>
     """
   end
 
@@ -497,6 +629,12 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
     query = String.trim(socket.assigns.search_query)
     grouped = socket.assigns.grouped_routes
 
+    hidden_keys = HiddenRoutes.all_keys()
+
+    filter_hidden = fn routes ->
+      Enum.reject(routes, fn r -> r.key in hidden_keys end)
+    end
+
     {all_routes, filtered} =
       if query == "" do
         {grouped, grouped}
@@ -504,9 +642,10 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
         filtered =
           Enum.reduce(grouped, %{}, fn {group, routes}, acc ->
             matching = Enum.filter(routes, fn r ->
-              String.contains?(String.downcase(r.path), String.downcase(query)) or
-                String.contains?(String.downcase(r.method), String.downcase(query)) or
-                String.contains?(String.downcase(to_string(r.controller)), String.downcase(query))
+              r.key not in hidden_keys and
+                (String.contains?(String.downcase(r.path), String.downcase(query)) or
+                 String.contains?(String.downcase(r.method), String.downcase(query)) or
+                 String.contains?(String.downcase(to_string(r.controller)), String.downcase(query)))
             end)
 
             if matching != [], do: Map.put(acc, group, matching), else: acc
@@ -514,6 +653,11 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
 
         {grouped, filtered}
       end
+
+    # Also filter hidden from the base routes used for display
+    filtered = Map.new(filtered, fn {group, routes} -> {group, filter_hidden.(routes)} end)
+      |> Enum.reject(fn {_, routes} -> routes == [] end)
+      |> Map.new()
 
     final =
       if socket.assigns.group_by_controller do
@@ -544,9 +688,10 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
     total = Enum.count(mutable)
     enabled = Enum.count(mutable, & &1.enabled)
     disabled = total - enabled
+    hidden = HiddenRoutes.count()
     ratio = if total > 0, do: disabled / total, else: 0.0
 
-    %{total: total, enabled: enabled, disabled: disabled, disabled_ratio: ratio}
+    %{total: total, enabled: enabled, disabled: disabled, hidden: hidden, disabled_ratio: ratio}
   end
 
   defp find_route(grouped_routes, key) do

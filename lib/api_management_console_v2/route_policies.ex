@@ -55,6 +55,9 @@ defmodule ApiManagementConsoleV2.RoutePolicies do
     |> Store.bulk_put()
   end
 
+  @doc "Reset all policies — delete DETS file."
+  def reset_all, do: Store.reset_all()
+
   @doc "Check if a route is enabled by key."
   def enabled?(key), do: Store.enabled?(key)
 

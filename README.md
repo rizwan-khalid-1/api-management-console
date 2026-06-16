@@ -126,6 +126,21 @@ config :api_management_console,
   ]
 ```
 
+**Storage path** — where policy and audit files are kept:
+
+```elixir
+config :api_management_console,
+  storage_dir: "/var/data/api_console"   # default: "tmp/"
+```
+
+**Company branding** — customize the console appearance:
+
+```elixir
+config :api_management_console, :branding,
+  app_name: "Acme Corp API Console",
+  hide_powered_by: true
+```
+
 **Option B — Add routes manually (full control)**
 
 ```elixir
@@ -165,13 +180,14 @@ $ mix phx.server
 - **Health Bar** — visual progress bar showing enabled vs disabled ratio
 - **Protected Routes** — immutable routes (greyed out, untoggleable) via config
 - **Dark Mode** — auto-detects `prefers-color-scheme`
-- **Bulk Operations** — checkboxes, select all/clear per group, bulk enable/disable
-- **Audit Log** — every toggle logged with old→new state, expandable with pagination, CSV download
+- **Bulk Operations** — checkboxes, select all/clear per group, bulk enable/disable, hide selected routes
+- **Audit Log** — every action logged (toggle, hide, reset), expandable with pagination, CSV download
+- **Reset All** — one-click re-enable all routes with confirmation dialog
+- **Company Branding** — custom app name, hide powered-by footer
 
 ### Pro (Licensed)
 - Unlimited routes
 - Up to 5 admin accounts with RBAC (Admin/Viewer)
-- Company branding (custom logo, colors, app name)
 - Scheduled toggles for maintenance windows
 - JSON/YAML export/import
 - Slack and webhook alerts
