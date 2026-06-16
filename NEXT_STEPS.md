@@ -40,15 +40,43 @@
 
 ## Phase 4 — Next Steps
 
-(TBD — based on user feedback)
+### 1. Replace DETS with CubDB
+
+Switch storage backend from DETS to [CubDB](https://github.com/lucaong/cubdb) (~> 2.0).
+
+- **Why:** ACID transactions, crash-safe, concurrent reads (MVCC), auto-compaction. DETS can corrupt on crash and blocks on writes.
+- **Files to change:** Only `RoutePolicies.Store` and `AuditLog.Store` — the abstraction is already in place.
+- **Effort:** Medium
+
+### 2. Licensing Module (Offline JWT)
+
+Add license key validation using signed JWT tokens. No phone-home, no external server.
+
+- **Flow:** User sets `API_CONSOLE_LICENSE_KEY` env var → library validates signature with embedded public key → unlocks tier features
+- **Tiers:** `:free`, `:pro`, `:enterprise`
+- **Files:** `license.ex`, `features.ex`, `priv/keys/public_key.pem`
+- **Dep:** `joken` (~> 2.6)
+- **Effort:** Medium
+
+### 3. RBAC (Admin / Viewer)
+
+Multiple admin accounts with role-based access control.
+
+- **Admin:** Full access — toggle routes, hide/show, reset, view audit
+- **Viewer:** Read-only — can view routes and audit log, cannot toggle or change anything
+- **Storage:** Credentials stored in a configurable file or `api_admins.dets`/CubDB
+- **UI:** Login page (replace Basic Auth), role badge in header, disabled buttons for viewers
+- **Effort:** High
 
 ---
 
 ## Upcoming (Complex — Later)
 
-- Licensing module (JWT offline validation)
-- RBAC (admin/viewer roles)
 - Scheduled toggles
 - PostgreSQL storage
-- Company branding
-- SSO integration
+
+---
+
+## Distant Future (Phase 5+)
+
+- **SSO Integration** — OIDC/SAML login via Okta, Azure AD, Google Workspace. Needed for enterprise sales but only worth building when paying Enterprise customers request it.
