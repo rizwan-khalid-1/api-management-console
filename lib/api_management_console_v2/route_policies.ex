@@ -121,10 +121,11 @@ defmodule ApiManagementConsoleV2.RoutePolicies do
 
   defp mutable_route?(route) do
     user_protected = Application.get_env(:api_management_console, :protected_routes, [])
-    console_paths = :persistent_term.get({:api_management_console, :console_paths}, [])
-    immutable_prefixes = user_protected ++ console_paths
+    immutable_prefixes = user_protected
 
-    is_immutable = Enum.any?(immutable_prefixes, fn prefix ->
+    is_immutable =
+      ApiManagementConsoleV2.ConsolePaths.matches?(route.path) or
+      Enum.any?(immutable_prefixes, fn prefix ->
       cond do
         is_binary(prefix) ->
           String.starts_with?(route.path, prefix) or String.ends_with?(route.path, prefix)

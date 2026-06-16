@@ -31,8 +31,7 @@ defmodule ApiManagementConsoleV2.Plugs.RouteGuard do
     router = :persistent_term.get({:api_management_console, :phoenix_router}, nil)
 
     # Never block the console itself — always allow
-    console_paths = :persistent_term.get({:api_management_console, :console_paths}, [])
-    is_console = Enum.any?(console_paths, fn p -> String.starts_with?(conn.request_path, p) end)
+    is_console = ApiManagementConsoleV2.ConsolePaths.matches?(conn.request_path)
 
     allowed = is_console or (router && RoutePolicies.request_allowed?(router, conn.method, conn.request_path))
 
