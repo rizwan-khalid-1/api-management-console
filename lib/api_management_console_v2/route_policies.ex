@@ -16,6 +16,8 @@ defmodule ApiManagementConsoleV2.RoutePolicies do
 
   require Logger
 
+  import ApiManagementConsoleV2.Debug, only: [log: 1]
+
   alias ApiManagementConsoleV2.RoutePolicies.Store
 
   # --- Public API ---
@@ -41,7 +43,7 @@ defmodule ApiManagementConsoleV2.RoutePolicies do
 
   @doc "Toggle a single route by key."
   def set_route_enabled(route_key, enabled) when is_binary(route_key) and is_boolean(enabled) do
-    Logger.debug("[ApiPolicies] set_route_enabled — key=#{route_key}, enabled=#{enabled}")
+    log("[ApiPolicies] set_route_enabled — key=#{route_key}, enabled=#{enabled}")
     Store.put(route_key, enabled)
   end
 
@@ -72,10 +74,13 @@ defmodule ApiManagementConsoleV2.RoutePolicies do
       :error -> {:not_found, nil, true}
     end
 
-    Logger.debug("[ApiPolicies] request_allowed? — #{method} #{path} -> #{inspect(result)}")
+    log("[ApiPolicies] request_allowed? — #{method} #{path} -> #{inspect(result)}")
 
     elem(result, 2)
   end
+
+  @doc "Check if a path belongs to the API console itself."
+  def console_route?(path), do: String.contains?(path, "/api-console")
 
   # --- GenServer ---
 
@@ -88,6 +93,8 @@ defmodule ApiManagementConsoleV2.RoutePolicies do
   def init(_opts) do
     Store.start_link()
     ApiManagementConsoleV2.AuditLog.Store.start_link()
+    ApiManagementConsoleV2.Accounts.Store.start_link()
+    ApiManagementConsoleV2.Accounts.ensure_admin_exists()
     {:ok, nil}
   end
 
@@ -124,7 +131,11 @@ defmodule ApiManagementConsoleV2.RoutePolicies do
   defp normalize_method(method) when is_binary(method), do: String.downcase(method)
 
   defp mutable_route?(route) do
-    user_protected = Application.get_env(:api_management_console, :protected_routes, [])
+    # Console routes and sub-routes (login, logout, audit.csv) are always immutable
+    if console_route?(route.path) do
+      false
+    else
+      user_protected = Application.get_env(:api_management_console, :protected_routes, [])
     immutable_prefixes = user_protected
 
     is_immutable =
@@ -139,9 +150,10 @@ defmodule ApiManagementConsoleV2.RoutePolicies do
       end
     end)
 
-    Logger.debug("[ApiPolicies] mutable? — path=#{route.path}, immutable_prefixes=#{inspect(immutable_prefixes)}, is_immutable=#{is_immutable}")
+    log("[ApiPolicies] mutable? — path=#{route.path}, immutable_prefixes=#{inspect(immutable_prefixes)}, is_immutable=#{is_immutable}")
 
     not is_immutable
+    end
   end
 
   defp group_name(route) do

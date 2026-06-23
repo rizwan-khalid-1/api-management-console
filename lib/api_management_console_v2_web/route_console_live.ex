@@ -10,6 +10,8 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
     • Bulk select with enable/disable all
     • Expandable audit log with pagination
     • Immutable routes grayed out
+    • Role-based access (Admin / Viewer)
+    • Account management (Admin only)
     • Works in LIVE and STATIC modes
   """
 
@@ -17,20 +19,28 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
 
   require Logger
 
-  alias ApiManagementConsoleV2.{AuditLog, Branding, HiddenRoutes, RoutePolicies}
+  import ApiManagementConsoleV2.Debug, only: [log: 1]
+
+  alias ApiManagementConsoleV2.{Accounts, AuditLog, Branding, HiddenRoutes, RoutePolicies}
 
   @page_size 10
 
+  @admin_events ~w(toggle toggle_group bulk_enable bulk_disable hide_selected
+                   reset_all add_account delete_account show_route)
+
   @impl true
-  def mount(_params, _session, socket) do
-    Logger.debug("[ApiConsole] mount — connected?=#{connected?(socket)}, router=#{inspect(socket.router)}")
+  def mount(_params, session, socket) do
+    log("[ApiConsole] mount — connected?=#{connected?(socket)}, router=#{inspect(socket.router)}")
 
     RoutePolicies.start_link([])
+
+    user = session["api_console_user"] || %{"username" => "admin", "role" => "admin"}
+    user = %{username: user["username"], role: String.to_existing_atom(user["role"])}
 
     socket =
       socket
       |> assign(:grouped_routes, %{})
-      |> assign(:stats, %{total: 0, enabled: 0, disabled: 0, disabled_ratio: 0.0})
+      |> assign(:stats, %{total: 0, enabled: 0, disabled: 0, hidden: 0, disabled_ratio: 0.0})
       |> assign(:connected, connected?(socket))
       |> assign(:search_query, "")
       |> assign(:group_by_controller, true)
@@ -43,20 +53,33 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
       |> assign(:show_confirm_reset, false)
       |> assign(:show_hidden_modal, false)
       |> assign(:hidden_routes_list, [])
+      |> assign(:current_user, user)
+      |> assign(:show_accounts, false)
+      |> assign(:account_list, [])
 
     {:ok, load_dashboard(socket)}
   end
 
-  # --- Single toggle ---
+  # --- Centralized admin guard ---
 
   @impl true
-  def handle_event("toggle", %{"key" => key}, socket) do
+  def handle_event(event, params, socket) do
+    if event in @admin_events and not is_admin?(socket) do
+      {:noreply, socket}
+    else
+      do_handle_event(event, params, socket)
+    end
+  end
+
+  # --- Single toggle ---
+
+  defp do_handle_event("toggle", %{"key" => key}, socket) do
     route = find_route(socket.assigns.grouped_routes, key)
 
     if route && route.mutable do
       new_state = not route.enabled
       RoutePolicies.set_route_enabled(key, new_state)
-      AuditLog.append("admin", "toggle", key, route.enabled, new_state)
+      AuditLog.append(username(socket), "toggle", key, route.enabled, new_state)
     end
 
     {:noreply, load_dashboard(socket) |> clear_selection()}
@@ -64,7 +87,7 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
 
   # --- Group toggle ---
 
-  def handle_event("toggle_group", %{"group" => group}, socket) do
+  defp do_handle_event("toggle_group", %{"group" => group}, socket) do
     routes = Map.get(socket.assigns.grouped_routes, group, [])
     mutable = Enum.filter(routes, & &1.mutable)
 
@@ -74,7 +97,7 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
       RoutePolicies.set_group_enabled(socket.router, group, new_state)
 
       Enum.each(mutable, fn r ->
-        AuditLog.append("admin", "toggle_group", "#{group}/*", r.enabled, new_state)
+        AuditLog.append(username(socket), "toggle_group", "#{group}/*", r.enabled, new_state)
       end)
     end
 
@@ -83,13 +106,13 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
 
   # --- Search ---
 
-  def handle_event("search", %{"value" => query}, socket) do
+  defp do_handle_event("search", %{"value" => query}, socket) do
     {:noreply, socket |> assign(:search_query, query) |> apply_search()}
   end
 
   # --- Bulk selection ---
 
-  def handle_event("select", %{"key" => key}, socket) do
+  defp do_handle_event("select", %{"key" => key}, socket) do
     selected =
       if MapSet.member?(socket.assigns.selected_keys, key) do
         MapSet.delete(socket.assigns.selected_keys, key)
@@ -100,44 +123,44 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
     {:noreply, assign(socket, :selected_keys, selected)}
   end
 
-  def handle_event("select_all", %{"group" => group}, socket) do
+  defp do_handle_event("select_all", %{"group" => group}, socket) do
     routes = Map.get(socket.assigns.filtered_routes || socket.assigns.grouped_routes, group, [])
     keys = Enum.filter(routes, & &1.mutable) |> Enum.map(& &1.key)
     {:noreply, assign(socket, :selected_keys, MapSet.union(socket.assigns.selected_keys, MapSet.new(keys)))}
   end
 
-  def handle_event("select_all", _params, socket) do
+  defp do_handle_event("select_all", _params, socket) do
     all_keys = mutable_keys(socket.assigns.filtered_routes || socket.assigns.grouped_routes)
     {:noreply, assign(socket, :selected_keys, MapSet.new(all_keys))}
   end
 
-  def handle_event("deselect_group", %{"group" => group}, socket) do
+  defp do_handle_event("deselect_group", %{"group" => group}, socket) do
     routes = Map.get(socket.assigns.filtered_routes || socket.assigns.grouped_routes, group, [])
     keys = Enum.filter(routes, & &1.mutable) |> Enum.map(& &1.key) |> MapSet.new()
     {:noreply, assign(socket, :selected_keys, MapSet.difference(socket.assigns.selected_keys, keys))}
   end
 
-  def handle_event("deselect_all", _params, socket) do
+  defp do_handle_event("deselect_all", _params, socket) do
     {:noreply, assign(socket, :selected_keys, MapSet.new())}
   end
 
-  def handle_event("bulk_enable", _params, socket) do
+  defp do_handle_event("bulk_enable", _params, socket) do
     updates = Enum.map(socket.assigns.selected_keys, &{&1, true})
     RoutePolicies.Store.bulk_put(updates)
 
     Enum.each(socket.assigns.selected_keys, fn key ->
-      AuditLog.append("admin", "bulk_enable", key, nil, true)
+      AuditLog.append(username(socket), "bulk_enable", key, nil, true)
     end)
 
     {:noreply, load_dashboard(socket) |> clear_selection()}
   end
 
-  def handle_event("bulk_disable", _params, socket) do
+  defp do_handle_event("bulk_disable", _params, socket) do
     updates = Enum.map(socket.assigns.selected_keys, &{&1, false})
     RoutePolicies.Store.bulk_put(updates)
 
     Enum.each(socket.assigns.selected_keys, fn key ->
-      AuditLog.append("admin", "bulk_disable", key, nil, false)
+      AuditLog.append(username(socket), "bulk_disable", key, nil, false)
     end)
 
     {:noreply, load_dashboard(socket) |> clear_selection()}
@@ -145,13 +168,13 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
 
   # --- Grouping toggle ---
 
-  def handle_event("toggle_grouping", _params, socket) do
+  defp do_handle_event("toggle_grouping", _params, socket) do
     {:noreply, socket |> assign(:group_by_controller, not socket.assigns.group_by_controller) |> apply_search()}
   end
 
   # --- Audit log ---
 
-  def handle_event("toggle_audit", _params, socket) do
+  defp do_handle_event("toggle_audit", _params, socket) do
     if socket.assigns.audit_expanded do
       {:noreply, assign(socket, :audit_expanded, false)}
     else
@@ -160,7 +183,7 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
     end
   end
 
-  def handle_event("load_more_audit", _params, socket) do
+  defp do_handle_event("load_more_audit", _params, socket) do
     {entries, total} = AuditLog.list(offset: socket.assigns.audit_offset, limit: @page_size)
     all = socket.assigns.audit_entries ++ entries
     {:noreply, assign(socket, audit_entries: all, audit_offset: socket.assigns.audit_offset + @page_size, audit_total: total)}
@@ -168,7 +191,7 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
 
   # --- Hide routes ---
 
-  def handle_event("hide_selected", _params, socket) do
+  defp do_handle_event("hide_selected", _params, socket) do
     keys = MapSet.to_list(socket.assigns.selected_keys)
 
     if keys != [] do
@@ -177,31 +200,31 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
       Enum.each(keys, fn key ->
         route = Enum.find(routes, &(&1.key == key))
         state = if route, do: route.enabled, else: nil
-        AuditLog.append("admin", "hide", key, state, nil)
+        AuditLog.append(username(socket), "hide", key, state, nil)
       end)
     end
 
     {:noreply, load_dashboard(socket) |> clear_selection()}
   end
 
-  def handle_event("show_hidden_modal", _params, socket) do
+  defp do_handle_event("show_hidden_modal", _params, socket) do
     routes = socket.assigns.grouped_routes |> Map.values() |> List.flatten()
     hidden_keys = HiddenRoutes.all_keys()
     hidden_routes = Enum.filter(routes, fn r -> r.key in hidden_keys end)
     {:noreply, assign(socket, show_hidden_modal: true, hidden_routes_list: hidden_routes)}
   end
 
-  def handle_event("close_hidden_modal", _params, socket) do
+  defp do_handle_event("close_hidden_modal", _params, socket) do
     {:noreply, assign(socket, show_hidden_modal: false)}
   end
 
-  def handle_event("show_route", %{"key" => key}, socket) do
+  defp do_handle_event("show_route", %{"key" => key}, socket) do
     HiddenRoutes.show([key])
 
     routes = socket.assigns.grouped_routes |> Map.values() |> List.flatten()
     route = Enum.find(routes, &(&1.key == key))
     state = if route, do: route.enabled, else: nil
-    AuditLog.append("admin", "show", key, state, nil)
+    AuditLog.append(username(socket), "show", key, state, nil)
 
     hidden_keys = HiddenRoutes.all_keys()
     hidden_routes = Enum.filter(routes, fn r -> r.key in hidden_keys end)
@@ -211,18 +234,47 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
 
   # --- Reset all ---
 
-  def handle_event("confirm_reset", _params, socket) do
+  defp do_handle_event("confirm_reset", _params, socket) do
     {:noreply, assign(socket, show_confirm_reset: true)}
   end
 
-  def handle_event("cancel_reset", _params, socket) do
+  defp do_handle_event("cancel_reset", _params, socket) do
     {:noreply, assign(socket, show_confirm_reset: false)}
   end
 
-  def handle_event("reset_all", _params, socket) do
+  defp do_handle_event("reset_all", _params, socket) do
     RoutePolicies.reset_all()
-    AuditLog.append("admin", "reset_all", "—", "—", "—")
+    AuditLog.append(username(socket), "reset_all", "—", "—", "—")
     {:noreply, load_dashboard(socket) |> assign(show_confirm_reset: false)}
+  end
+
+  # --- Account management ---
+
+  defp do_handle_event("toggle_accounts", _params, socket) do
+    if socket.assigns.show_accounts do
+      {:noreply, assign(socket, show_accounts: false)}
+    else
+      {:noreply, assign(socket, show_accounts: true, account_list: Accounts.list())}
+    end
+  end
+
+  defp do_handle_event("add_account", %{"username" => username, "password" => password, "role" => role}, socket) do
+    role_atom = String.to_existing_atom(role)
+
+    case Accounts.create(username, password, role_atom) do
+      :ok ->
+        AuditLog.append(username(socket), "add_account", username, nil, nil)
+        {:noreply, assign(socket, account_list: Accounts.list())}
+
+      {:error, _} ->
+        {:noreply, socket}
+    end
+  end
+
+  defp do_handle_event("delete_account", %{"username" => username}, socket) do
+    Accounts.delete(username)
+    AuditLog.append(username(socket), "delete_account", username, nil, nil)
+    {:noreply, assign(socket, account_list: Accounts.list())}
   end
 
   # --- Dead render fallback (query params) ---
@@ -234,7 +286,7 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
     if route && route.mutable do
       new_state = not route.enabled
       RoutePolicies.set_route_enabled(key, new_state)
-      AuditLog.append("admin", "toggle", key, route.enabled, new_state)
+      AuditLog.append(username(socket), "toggle", key, route.enabled, new_state)
     end
 
     clean_path = URI.parse(uri).path
@@ -377,25 +429,24 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
               <span class={"console-connection-badge " <> if(@connected, do: "console-connection-live", else: "console-connection-static")}>
                 <%= if @connected, do: "LIVE", else: "STATIC" %>
               </span>
-              <button
-                phx-click="toggle_grouping"
-                class="console-group-btn"
-                style="margin-left:0.5rem;font-size:0.65rem;padding:0.25rem 0.5rem;"
-              >
+              <button phx-click="toggle_grouping" class="console-group-btn" style="margin-left:0.5rem;font-size:0.65rem;padding:0.25rem 0.5rem;">
                 <%= if @group_by_controller, do: "Grouped", else: "Flat" %>
               </button>
             </h1>
             <p class="console-subtitle">Control route availability in real time.</p>
+            <div style="margin-top:0.5rem;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+              <span style="font-size:0.75rem;color:#6b7280;">
+                Logged in as <strong><%= @current_user.username %></strong>
+                (<%= if @current_user.role == :admin, do: "Admin", else: "Viewer" %>)
+              </span>
+              <a href={"#{@console_path}/logout"} style="font-size:0.75rem;color:#3b82f6;text-decoration:none;">Logout</a>
+            </div>
           </div>
           <div class="console-stats">
             <div>
               <span class="console-stat-enabled"><%= @stats.enabled %> enabled</span>
-              <%= if @stats.disabled > 0 do %>
-                / <span class="console-stat-disabled"><%= @stats.disabled %> disabled</span>
-              <% end %>
-              <%= if @stats.hidden > 0 do %>
-                / <button phx-click="show_hidden_modal" class="console-hidden-count"><%= @stats.hidden %> hidden</button>
-              <% end %>
+              / <span class="console-stat-disabled"><%= @stats.disabled %> disabled</span>
+              / <button phx-click="show_hidden_modal" class="console-hidden-count"><%= @stats.hidden %> hidden</button>
             </div>
             <span class="console-stat-label"><%= @stats.total %> total mutable routes</span>
           </div>
@@ -409,33 +460,17 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
           </div>
         <% end %>
 
-        <input
-          type="text"
-          placeholder="Search routes by path, method, or controller..."
-          phx-keyup="search"
-          phx-debounce="200"
-          value={@search_query}
-          class="console-search"
-        />
+        <input type="text" placeholder="Search routes by path, method, or controller..." phx-keyup="search" phx-debounce="200" value={@search_query} class="console-search" />
 
-        <%= if Enum.count(@selected_keys) > 0 do %>
-          <div style="display:flex;align-items:center;gap:0.5rem;margin-top:0.5rem;">
-            <span class="console-stat-label"><%= Enum.count(@selected_keys) %> selected</span>
-            <button phx-click="deselect_all" class="console-select-all">Clear</button>
-          </div>
-        <% end %>
+        <div style="display:flex;align-items:center;gap:0.5rem;margin-top:0.75rem;">
+          <button phx-click="confirm_reset" class="console-reset-btn" title="This will re-enable ALL disabled routes.">⚠ Reset All Policies</button>
+        </div>
 
         <%= if not @connected do %>
           <p style="margin-top:1rem; font-size:0.8rem; color:#b45309; background:#fef3c7; padding:0.5rem 0.75rem; border-radius:6px;">
             💡 Toggles work but cause a page reload. For instant toggles, add LiveView JS to your app.
           </p>
         <% end %>
-
-        <div style="display:flex;align-items:center;gap:0.5rem;margin-top:0.75rem;">
-          <button phx-click="confirm_reset" class="console-reset-btn" title="This will re-enable ALL disabled routes. This cannot be undone.">
-            ⚠ Reset All Policies
-          </button>
-        </div>
       </div>
 
       <%= for {group, routes} <- @filtered_routes || @grouped_routes do %>
@@ -450,32 +485,19 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
               <button phx-click="select_all" phx-value-group={group} class="console-select-all">Select All</button>
               <button phx-click="deselect_group" phx-value-group={group} class="console-select-all">Clear</button>
               <%= if Enum.count(mutable_in_group) > 0 do %>
-                <button phx-click="toggle_group" phx-value-group={group} class="console-group-btn">
-                  Toggle Group
-                </button>
+                <button phx-click="toggle_group" phx-value-group={group} class="console-group-btn">Toggle Group</button>
               <% end %>
             </div>
           </div>
 
           <%= for route <- routes do %>
             <% selected = MapSet.member?(@selected_keys, route.key) %>
-            <div class={
-              "console-route-row " <>
-              cond do
-                not route.mutable -> "console-route-immutable"
-                route.enabled -> "console-route-enabled"
-                true -> "console-route-disabled"
-              end
-            }>
-              <input
-                :if={route.mutable}
-                type="checkbox"
-                class="console-checkbox"
-                checked={selected}
-                phx-click="select"
-                phx-value-key={route.key}
-              />
-
+            <div class={"console-route-row " <> cond do
+              not route.mutable -> "console-route-immutable"
+              route.enabled -> "console-route-enabled"
+              true -> "console-route-disabled"
+            end}>
+              <input :if={route.mutable} type="checkbox" class="console-checkbox" checked={selected} phx-click="select" phx-value-key={route.key} />
               <div class="console-route-left">
                 <div class="console-route-meta">
                   <span class="console-method-badge"><%= route.method %></span>
@@ -484,12 +506,7 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
                 <p class="console-route-path"><%= route.path %></p>
               </div>
 
-              <button
-                :if={route.mutable}
-                phx-click="toggle"
-                phx-value-key={route.key}
-                class={"console-toggle " <> if(route.enabled, do: "console-toggle-on", else: "console-toggle-off")}
-              >
+              <button :if={route.mutable} phx-click="toggle" phx-value-key={route.key} class={"console-toggle " <> if(route.enabled, do: "console-toggle-on", else: "console-toggle-off")}>
                 <span class={"console-toggle-knob " <> if(route.enabled, do: "console-toggle-knob-on", else: "console-toggle-knob-off")} />
               </button>
               <span :if={not route.mutable} class="console-toggle console-toggle-immutable">
@@ -502,34 +519,25 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
 
       <div class="console-audit-panel">
         <button phx-click="toggle_audit" class="console-audit-toggle">
-          <span>
-            📋 Audit Log
-            <a href={"#{@console_path}/audit.csv"} class="console-audit-download">Download CSV</a>
-          </span>
+          <span>📋 Audit Log<a href={"#{@console_path}/audit.csv"} class="console-audit-download">Download CSV</a></span>
           <span><%= if @audit_expanded, do: "▲", else: "▼" %></span>
         </button>
-
         <%= if @audit_expanded do %>
           <div class="console-audit-body">
             <%= for entry <- @audit_entries do %>
               <div class="console-audit-row">
+                <span style="font-size:0.65rem;color:#9ca3af;min-width:60px;"><%= entry.who %></span>
                 <div class="console-audit-left">
                   <%= if entry.action in ["hide", "show"] do %>
-                    <span class={"console-audit-badge " <> if(entry.action == "hide", do: "console-audit-badge-hidden", else: "console-audit-badge-shown")}>
-                      <%= String.upcase(entry.action) %>
-                    </span>
+                    <span class={"console-audit-badge " <> if(entry.action == "hide", do: "console-audit-badge-hidden", else: "console-audit-badge-shown")}><%= String.upcase(entry.action) %></span>
                     <span class="console-stat-label"><%= if entry.old_state, do: "ON", else: "OFF" %></span>
                   <% else %>
                     <%= if entry.action == "reset_all" do %>
                       <span class="console-audit-badge console-audit-badge-reset">RESET ALL</span>
                     <% else %>
-                      <span class={"console-audit-badge " <> if(entry.old_state, do: "console-audit-badge-on", else: "console-audit-badge-off")}>
-                        <%= if entry.old_state, do: "ON", else: "OFF" %>
-                      </span>
+                      <span class={"console-audit-badge " <> if(entry.old_state, do: "console-audit-badge-on", else: "console-audit-badge-off")}><%= if entry.old_state, do: "ON", else: "OFF" %></span>
                       <span class="console-audit-arrow">→</span>
-                      <span class={"console-audit-badge " <> if(entry.new_state, do: "console-audit-badge-on", else: "console-audit-badge-off")}>
-                        <%= if entry.new_state, do: "ON", else: "OFF" %>
-                      </span>
+                      <span class={"console-audit-badge " <> if(entry.new_state, do: "console-audit-badge-on", else: "console-audit-badge-off")}><%= if entry.new_state, do: "ON", else: "OFF" %></span>
                     <% end %>
                   <% end %>
                   <span class="console-audit-route"><%= entry.key %></span>
@@ -537,23 +545,49 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
                 <span class="console-audit-time"><%= entry.timestamp %></span>
               </div>
             <% end %>
-
             <%= if @audit_offset < @audit_total do %>
-              <button
-                phx-click="load_more_audit"
-                class="console-group-btn"
-                style="margin-top:0.75rem;display:block;width:100%;text-align:center;"
-              >
-                Load more (<%= @audit_total - @audit_offset %> remaining)
-              </button>
+              <button phx-click="load_more_audit" class="console-group-btn" style="margin-top:0.75rem;display:block;width:100%;text-align:center;">Load more (<%= @audit_total - @audit_offset %> remaining)</button>
             <% end %>
-
             <%= if @audit_entries == [] do %>
               <p class="console-stat-label" style="text-align:center;padding:1rem;">No audit entries yet.</p>
             <% end %>
           </div>
         <% end %>
       </div>
+
+      <%= if @current_user.role == :admin do %>
+        <div class="console-audit-panel">
+          <button phx-click="toggle_accounts" class="console-audit-toggle">
+            <span>👥 Accounts</span>
+            <span><%= if @show_accounts, do: "▲", else: "▼" %></span>
+          </button>
+          <%= if @show_accounts do %>
+            <div class="console-audit-body">
+              <form phx-submit="add_account" style="display:flex;gap:0.5rem;margin-bottom:1rem;flex-wrap:wrap;">
+                <input type="text" name="username" placeholder="Username" class="login-input" style="flex:1;min-width:120px;margin:0;" required>
+                <input type="password" name="password" placeholder="Password" class="login-input" style="flex:1;min-width:120px;margin:0;" required>
+                <select name="role" class="login-input" style="flex:0;min-width:100px;margin:0;">
+                  <option value="viewer">Viewer</option>
+                  <option value="admin">Admin</option>
+                </select>
+                <button type="submit" class="console-bulk-btn console-bulk-enable">Add</button>
+              </form>
+              <%= for account <- @account_list do %>
+                <div class="console-audit-row">
+                  <div class="console-audit-left">
+                    <span class="console-method-badge"><%= if account.role == :admin, do: "Admin", else: "Viewer" %></span>
+                    <span style="font-size:0.85rem;"><%= account.username %></span>
+                    <span class="console-audit-time"><%= account.created_at %></span>
+                  </div>
+                  <%= if account.username != @current_user.username do %>
+                    <button phx-click="delete_account" phx-value-username={account.username} class="console-bulk-btn console-bulk-disable" style="font-size:0.7rem;padding:0.2rem 0.5rem;">Remove</button>
+                  <% end %>
+                </div>
+              <% end %>
+            </div>
+          <% end %>
+        </div>
+      <% end %>
 
       <%= if Enum.count(@selected_keys) > 0 do %>
         <div class="console-bulk-bar">
@@ -609,6 +643,9 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
 
   # --- helpers ---
 
+  defp username(socket), do: socket.assigns.current_user.username
+  defp is_admin?(socket), do: socket.assigns.current_user.role == :admin
+
   defp load_dashboard(socket) do
     router = socket.router
 
@@ -654,7 +691,6 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
         {grouped, filtered}
       end
 
-    # Also filter hidden from the base routes used for display
     filtered = Map.new(filtered, fn {group, routes} -> {group, filter_hidden.(routes)} end)
       |> Enum.reject(fn {_, routes} -> routes == [] end)
       |> Map.new()
@@ -667,16 +703,14 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
         if flat == [], do: %{}, else: %{"All Routes" => flat}
       end
 
-    Logger.debug("[ApiConsole] search — query=#{inspect(query)}, groups=#{map_size(final)}, total=#{stats_for(final).total}")
+    log("[ApiConsole] search — query=#{inspect(query)}, groups=#{map_size(final)}, total=#{stats_for(final).total}")
 
     socket
     |> assign(:filtered_routes, final)
     |> assign(:stats, stats_for(all_routes))
   end
 
-  defp stats_for(grouped_routes) do
-    compute_stats(grouped_routes)
-  end
+  defp stats_for(grouped_routes), do: compute_stats(grouped_routes)
 
   defp compute_stats(grouped_routes) do
     mutable =
@@ -701,9 +735,7 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
     |> Enum.find(&(&1.key == key))
   end
 
-  defp clear_selection(socket) do
-    assign(socket, :selected_keys, MapSet.new())
-  end
+  defp clear_selection(socket), do: assign(socket, :selected_keys, MapSet.new())
 
   defp mutable_keys(grouped_routes) do
     grouped_routes

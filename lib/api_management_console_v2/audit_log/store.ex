@@ -3,10 +3,12 @@ defmodule ApiManagementConsoleV2.AuditLog.Store do
 
   require Logger
 
+  import ApiManagementConsoleV2.Debug, only: [log: 1]
+
   @db_name :api_audit_db
 
   defp data_dir do
-    dir = Application.get_env(:api_management_console, :storage_dir, "tmp")
+    dir = Application.get_env(:api_management_console, :storage_dir, "api-console-data")
     Path.join(dir, "api_audit")
   end
 
@@ -19,7 +21,7 @@ defmodule ApiManagementConsoleV2.AuditLog.Store do
     key = "#{System.system_time(:millisecond)}_#{:rand.uniform(999_999)}"
     CubDB.put(@db_name, key, entry)
 
-    Logger.debug("[AuditStore] append — key=#{entry.key}, #{entry.old_state} → #{entry.new_state}")
+    log("[AuditStore] append — key=#{entry.key}, #{entry.old_state} → #{entry.new_state}")
     :ok
   end
 

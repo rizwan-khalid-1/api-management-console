@@ -53,9 +53,17 @@ defmodule ApiManagementConsoleV2.Router do
       # Store the console path so it's automatically protected from being disabled
       ApiManagementConsoleV2.ConsolePaths.add(path)
 
+      # Login page — no auth required (uses controller for session-based auth)
+      scope path, alias: false, as: false do
+        get "/login", ApiManagementConsoleV2Web.LoginController, :index
+        post "/login", ApiManagementConsoleV2Web.LoginController, :create
+      end
+
+      # Protected console routes
       scope path, alias: false, as: false do
         import Phoenix.LiveView.Router, only: [live: 3]
         pipe_through [:api_console_auth]
+        get "/logout", ApiManagementConsoleV2Web.Plugs.Logout, []
         get "/audit.csv", ApiManagementConsoleV2Web.Plugs.AuditDownload, []
         live "/", ApiManagementConsoleV2Web.RouteConsoleLive, :index
       end

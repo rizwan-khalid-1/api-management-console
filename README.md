@@ -13,7 +13,7 @@ A Phoenix LiveView library that gives you real-time control over your backend ro
 - **One-Click Toggles** — Enable or disable individual routes or entire groups instantly
 - **Guard Plug Enforcement** — Disabled routes return `403` at the Plug level, before they hit your controller
 - **Persistent State** — Route policy stored locally via CubDB (embedded key-value store, crash-safe)
-- **Protected Console** — Admin dashboard behind Basic Auth so only you can make changes
+- **Protected Console** — Session-based login with admin/viewer roles, account management
 
 ---
 
@@ -101,7 +101,12 @@ pipeline :api do
 end
 ```
 
-The macro automatically adds HTTP Basic Auth. Set credentials:
+The console uses session-based authentication. A default admin account is created on first use:
+
+- **Username:** `admin`
+- **Password:** `admin123`
+
+Override via env vars:
 
 ```bash
 export API_CONSOLE_ADMIN_USERNAME=admin
@@ -130,7 +135,7 @@ config :api_management_console,
 
 ```elixir
 config :api_management_console,
-  storage_dir: "/var/data/api_console"   # default: "tmp/"
+  storage_dir: "/var/data/api_console"   # default: "api-console-data/"
 ```
 
 **Company branding** — customize the console appearance:
@@ -139,6 +144,12 @@ config :api_management_console,
 config :api_management_console, :branding,
   app_name: "Acme Corp API Console",
   hide_powered_by: true
+```
+
+**Debug logging** — enable detailed debug output for troubleshooting:
+
+```elixir
+config :api_management_console, :debug, true   # default: false
 ```
 
 **Option B — Add routes manually (full control)**
@@ -184,6 +195,8 @@ $ mix phx.server
 - **Audit Log** — every action logged (toggle, hide, reset), expandable with pagination, CSV download
 - **Reset All** — one-click re-enable all routes with confirmation dialog
 - **Company Branding** — custom app name, hide powered-by footer
+- **RBAC** — Admin (full access) and Viewer (read-only) roles with session-based login
+- **Account Management** — add/remove users, change roles via console UI
 
 ### Pro (Licensed)
 - Unlimited routes

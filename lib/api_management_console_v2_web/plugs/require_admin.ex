@@ -1,15 +1,14 @@
 defmodule ApiManagementConsoleV2Web.Plugs.RequireAdmin do
   @moduledoc """
-  A Plug that enforces HTTP Basic Authentication.
+  Ensures the user is authenticated before accessing console routes.
 
-  Credentials are read from environment variables:
+  Checks `Plug.Conn.get_session/2` for `:api_console_user`.
+  If not authenticated, redirects to the login page.
+  If authenticated, assigns `:api_console_user` to the conn for downstream use.
 
-    - `API_CONSOLE_ADMIN_USERNAME` (default: `"admin"`)
-    - `API_CONSOLE_ADMIN_PASSWORD` (default: `"admin123"`)
+  ## Session key
 
-  If the request has no valid Authorization header, the plug returns
-  a 401 response with a `WWW-Authenticate` header, prompting the
-  browser to show its native login dialog.
+      :api_console_user → %{username: "john", role: :admin}
   """
 
   @behaviour Plug
@@ -21,28 +20,20 @@ defmodule ApiManagementConsoleV2Web.Plugs.RequireAdmin do
 
   @impl true
   def call(conn, _opts) do
-    username = System.get_env("API_CONSOLE_ADMIN_USERNAME", "admin")
-    password = System.get_env("API_CONSOLE_ADMIN_PASSWORD", "admin123")
+    case get_session(conn, :api_console_user) do
+      %{"username" => username, "role" => role} ->
+        user = %{username: username, role: String.to_existing_atom(role)}
+        assign(conn, :api_console_user, user)
 
-    case get_req_header(conn, "authorization") do
-      ["Basic " <> encoded] ->
-        case Base.decode64(encoded) do
-          {:ok, ^username <> ":" <> ^password} ->
-            conn
-
-          _ ->
-            auth_fail(conn)
-        end
-
-      _ ->
-        auth_fail(conn)
+      nil ->
+        conn
+        |> put_session(:return_to, conn.request_path)
+        |> Phoenix.Controller.redirect(to: login_path(conn))
+        |> halt()
     end
   end
 
-  defp auth_fail(conn) do
-    conn
-    |> put_resp_header("www-authenticate", ~s|Basic realm="API Console"|)
-    |> send_resp(401, "Unauthorized")
-    |> halt()
+  defp login_path(conn) do
+    conn.request_path <> "/login"
   end
 end

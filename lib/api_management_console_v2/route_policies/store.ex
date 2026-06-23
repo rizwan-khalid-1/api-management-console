@@ -3,11 +3,13 @@ defmodule ApiManagementConsoleV2.RoutePolicies.Store do
 
   require Logger
 
+  import ApiManagementConsoleV2.Debug, only: [log: 1]
+
   @db_name :api_policies_db
   @hidden_prefix "__hidden__"
 
   defp data_dir do
-    dir = Application.get_env(:api_management_console, :storage_dir, "tmp")
+    dir = Application.get_env(:api_management_console, :storage_dir, "api-console-data")
     Path.join(dir, "api_policies")
   end
 
@@ -24,7 +26,7 @@ defmodule ApiManagementConsoleV2.RoutePolicies.Store do
   end
 
   def put(key, enabled) do
-    Logger.debug("[ApiStore] put — key=#{key}, enabled=#{enabled}")
+    log("[ApiStore] put — key=#{key}, enabled=#{enabled}")
     CubDB.put(@db_name, key, enabled)
     :ok
   end

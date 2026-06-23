@@ -41,6 +41,7 @@
 ## ✅ Phase 4 — Done
 
 1. Replace DETS with CubDB — ACID transactions, crash-safe, concurrent reads, zero config
+2. RBAC — Admin/Viewer roles, session-based login, account management, centralized admin guard
 
 ## Phase 5 — Next Steps
 
@@ -54,15 +55,13 @@ Add license key validation using signed JWT tokens. No phone-home, no external s
 - **Dep:** `joken` (~> 2.6)
 - **Effort:** Medium
 
-### 3. RBAC (Admin / Viewer)
+### 2. Move CubDB to Supervision Tree
 
-Multiple admin accounts with role-based access control.
+Currently CubDB processes are lazy-started on first access. If a CubDB process crashes, requests fail until the next access re-starts it.
 
-- **Admin:** Full access — toggle routes, hide/show, reset, view audit
-- **Viewer:** Read-only — can view routes and audit log, cannot toggle or change anything
-- **Storage:** Credentials stored in a configurable file or `api_admins.dets`/CubDB
-- **UI:** Login page (replace Basic Auth), role badge in header, disabled buttons for viewers
-- **Effort:** High
+- **Fix:** Start all CubDB processes in the application's supervision tree with `restart: :permanent`
+- **Benefit:** Auto-restart on crash, zero downtime between failures
+- **Files:** Add `application.ex` with a Supervisor
 
 ---
 
