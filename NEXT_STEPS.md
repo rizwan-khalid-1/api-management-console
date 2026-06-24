@@ -42,20 +42,11 @@
 
 1. Replace DETS with CubDB — ACID transactions, crash-safe, concurrent reads, zero config
 2. RBAC — Admin/Viewer roles, session-based login, account management, centralized admin guard
+3. Licensing Module — offline JWT validation, trial support, scalable feature flags (Features.enabled?/1), FREE/PRO badge in header
 
 ## Phase 5 — Next Steps
 
-### 1. Licensing Module (Offline JWT)
-
-Add license key validation using signed JWT tokens. No phone-home, no external server.
-
-- **Flow:** User sets `API_CONSOLE_LICENSE_KEY` env var → library validates signature with embedded public key → unlocks tier features
-- **Tiers:** `:free`, `:pro`, `:enterprise`
-- **Files:** `license.ex`, `features.ex`, `priv/keys/public_key.pem`
-- **Dep:** `joken` (~> 2.6)
-- **Effort:** Medium
-
-### 2. Move CubDB to Supervision Tree
+### 1. Move CubDB to Supervision Tree
 
 Currently CubDB processes are lazy-started on first access. If a CubDB process crashes, requests fail until the next access re-starts it.
 
@@ -63,12 +54,30 @@ Currently CubDB processes are lazy-started on first access. If a CubDB process c
 - **Benefit:** Auto-restart on crash, zero downtime between failures
 - **Files:** Add `application.ex` with a Supervisor
 
+### 2. Paid Features — Implement & Gate
+
+Uncomment and build the remaining paid-only features:
+
+- **`unlimited_routes`** — enforce 50-route cap on free tier, unlimited on paid
+- **`scheduled_toggles`** — schedule enable/disable at specific times
+- **`postgresql_storage`** — PostgreSQL backend option
+- **`slack_notifications`** — webhook alerts on policy changes
+
+### 3. Free Tier Limits (Enforce)
+
+Add enforcement for existing free-tier caps:
+
+- **50 route max** — show warning/inline prompt when approaching limit
+- **5 user max** — prevent adding more than 5 accounts on free tier
+- **30-day audit cap** — filter audit entries older than 30 days on free tier
+
 ---
 
 ## Upcoming (Complex — Later)
 
 - Scheduled toggles
 - PostgreSQL storage
+- handle limited routes in free version
 
 ---
 

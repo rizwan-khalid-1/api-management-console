@@ -115,41 +115,32 @@ export API_CONSOLE_ADMIN_PASSWORD=your_password
 
 ### Configuration
 
-**Protected (immutable) routes** — routes that cannot be toggled, shown grayed out in the console. The console's own path is automatically protected.
-
-Add your own in `config/config.exs`. Supports two match types:
+All settings under a single config key:
 
 ```elixir
 config :api_management_console,
+  # Protected routes — cannot be toggled (supports strings and regex)
   protected_routes: [
-    # String — matches path prefix or suffix
     "/dev/dashboard",
-
-    # Regex — matches path AND controller module name
     ~r{HealthController},
     ~r{^/api/internal/}
-  ]
-```
+  ],
 
-**Storage path** — where policy and audit files are kept:
+  # Storage path (default: "api-console-data/")
+  storage_dir: "/var/data/api_console",
 
-```elixir
-config :api_management_console,
-  storage_dir: "/var/data/api_console"   # default: "api-console-data/"
-```
-
-**Company branding** — customize the console appearance:
-
-```elixir
-config :api_management_console, :branding,
+  # Company branding
   app_name: "Acme Corp API Console",
-  hide_powered_by: true
+  hide_powered_by: true,
+
+  # Debug logging (default: false)
+  debug: true
 ```
 
-**Debug logging** — enable detailed debug output for troubleshooting:
+**License key** — unlock paid features (offline JWT validation):
 
-```elixir
-config :api_management_console, :debug, true   # default: false
+```bash
+export API_CONSOLE_LICENSE_KEY=eyJhbGciOiJSUzI1NiIs...
 ```
 
 **Option B — Add routes manually (full control)**
@@ -180,41 +171,31 @@ $ mix phx.server
 
 ## Features
 
-### Free (Included)
+### Free
 - **Route Discovery** — auto-discovers all routes from Phoenix router
-- **One-Click Toggles** — enable/disable individual routes or entire groups
+- **One-Click Toggles** — enable/disable individual routes or entire groups (up to 50 routes)
 - **Route Guard** — blocks disabled routes with 403 at the Plug level
-- **Basic Auth** — HTTP Basic Auth protects the console (configurable via env vars)
+- **Session Login** — session-based authentication with admin/viewer roles
 - **CubDB Storage** — embedded key-value store, crash-safe, ACID transactions
 - **Grouped Routes** — routes organized by controller name, toggleable to flat view
 - **Search & Filter** — instant search by path, method, or controller name
 - **Health Bar** — visual progress bar showing enabled vs disabled ratio
 - **Protected Routes** — immutable routes (greyed out, untoggleable) via config
 - **Dark Mode** — auto-detects `prefers-color-scheme`
-- **Bulk Operations** — checkboxes, select all/clear per group, bulk enable/disable, hide selected routes
-- **Audit Log** — every action logged (toggle, hide, reset), expandable with pagination, CSV download
+- **Bulk Operations** — checkboxes, select all/clear per group, bulk enable/disable
+- **Hide Routes** — hide routes from the console view
+- **Audit Log** — every action logged, expandable with pagination, 30-day history
 - **Reset All** — one-click re-enable all routes with confirmation dialog
-- **Company Branding** — custom app name, hide powered-by footer
-- **RBAC** — Admin (full access) and Viewer (read-only) roles with session-based login
-- **Account Management** — add/remove users, change roles via console UI
+- **RBAC** — Admin and Viewer roles, up to 5 users (1 admin + 4 viewers)
 
-### Pro (Licensed)
-- Unlimited routes
-- Up to 5 admin accounts with RBAC (Admin/Viewer)
-- Scheduled toggles for maintenance windows
-- JSON/YAML export/import
-- Slack and webhook alerts
-- PostgreSQL support for multi-node consistency
-
-### Enterprise (Licensed)
-- Unlimited admins
-- Full audit trail (2+ years)
-- REST API for programmatic policy management (CI/CD integration)
-- SSO (OIDC/SAML)
-- White-label (remove all API Console branding)
-- Redis storage for high-performance caching
-- Policy versioning with rollback
-- 99.9% SLA and priority support
+### Paid
+- **Unlimited Routes** — no 50-route cap *(coming soon)*
+- **Unlimited Users** — no 5-user cap on RBAC *(coming soon)*
+- **Full Audit History** — no 30-day retention limit, CSV download *(coming soon)*
+- **Company Branding** — custom app name, hide powered-by footer ✅
+- **Scheduled Toggles** — schedule enable/disable at specific times *(coming soon)*
+- **PostgreSQL Storage** — multi-node consistency *(coming soon)*
+- **Slack Notifications** — alerts on policy changes *(coming soon)*
 
 ---
 
@@ -223,8 +204,7 @@ $ mix phx.server
 | Storage | Use Case | Tier |
 |---|---|---|
 | CubDB | Default — embedded, zero config, crash-safe | Free |
-| PostgreSQL | Multi-node consistency, team environments | Pro |
-| Redis | High performance, caching layer | Enterprise |
+| PostgreSQL | Multi-node consistency, team environments | Paid |
 
 ---
 
@@ -232,10 +212,12 @@ $ mix phx.server
 
 Offline validation via signed JWT tokens — no phone-home, no external server dependency:
 
-1. Purchase a license through Paddle or Lemon Squeezy
-2. Receive your license key by email
+1. Purchase a license
+2. Receive your license key by email (signed JWT with embedded tier, expiry, trial claims)
 3. Set `API_CONSOLE_LICENSE_KEY` in your environment
-4. Premium features unlock automatically based on your tier
+4. Paid features unlock automatically based on the license tier
+
+Free tier is always available without a key.
 
 ---
 
@@ -256,7 +238,7 @@ Documentation is available in the `lib/` source and will be published to HexDocs
 ## License
 
 - **Free Tier**: MIT License — use, modify, distribute freely
-- **Pro & Enterprise**: Commercial license — requires a valid license key
+- **Paid Tier**: Commercial license — requires a valid license key (set `API_CONSOLE_LICENSE_KEY`)
 
 ---
 

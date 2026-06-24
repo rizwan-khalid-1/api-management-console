@@ -22,7 +22,8 @@ defmodule ApiManagementConsoleV2.MixProject do
       {:phoenix, "~> 1.6 or ~> 1.7", optional: true},
       {:phoenix_live_view, "~> 0.20 or ~> 1.0", optional: true},
       {:cubdb, "~> 2.0"},
-      {:bcrypt_elixir, "~> 3.0"}
+      {:bcrypt_elixir, "~> 3.0"},
+      {:joken, "~> 2.6"}
     ]
   end
 

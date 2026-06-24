@@ -30,3 +30,4 @@ api_management_console_v2-*.tar
 .elixir-tools/
 .expert/
 .dexter/
+private_key.pem

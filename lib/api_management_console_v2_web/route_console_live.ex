@@ -21,7 +21,7 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
 
   import ApiManagementConsoleV2.Debug, only: [log: 1]
 
-  alias ApiManagementConsoleV2.{Accounts, AuditLog, Branding, HiddenRoutes, RoutePolicies}
+  alias ApiManagementConsoleV2.{Accounts, AuditLog, Branding, Features, HiddenRoutes, License, RoutePolicies}
 
   @page_size 10
 
@@ -56,6 +56,7 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
       |> assign(:current_user, user)
       |> assign(:show_accounts, false)
       |> assign(:account_list, [])
+      |> assign(:show_upgrade_notice, upgrade_notice?())
 
     {:ok, load_dashboard(socket)}
   end
@@ -250,6 +251,10 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
 
   # --- Account management ---
 
+  defp do_handle_event("dismiss_upgrade_notice", _params, socket) do
+    {:noreply, assign(socket, show_upgrade_notice: false)}
+  end
+
   defp do_handle_event("toggle_accounts", _params, socket) do
     if socket.assigns.show_accounts do
       {:noreply, assign(socket, show_accounts: false)}
@@ -440,6 +445,9 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
                 (<%= if @current_user.role == :admin, do: "Admin", else: "Viewer" %>)
               </span>
               <a href={"#{@console_path}/logout"} style="font-size:0.75rem;color:#3b82f6;text-decoration:none;">Logout</a>
+              <span style={"font-size:0.65rem;font-weight:600;padding:2px 8px;border-radius:4px;" <> tier_badge_style(License.get_tier())}>
+                <%= tier_label(License.get_tier()) %>
+              </span>
             </div>
           </div>
           <div class="console-stats">
@@ -472,6 +480,25 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
           </p>
         <% end %>
       </div>
+
+      <%= if @show_upgrade_notice do %>
+        <div class="console-upgrade-notice">
+          <style>
+            .console-upgrade-notice { background:#fef3c7; border:1px solid #f59e0b; border-radius:12px; padding:0.75rem 1rem; margin-bottom:1rem; display:flex; justify-content:space-between; align-items:center; }
+            .console-upgrade-notice span { font-size:0.85rem; color:#92400e; }
+            .console-upgrade-notice button { border:none; background:none; cursor:pointer; color:#92400e; font-size:1.1rem; }
+            @media (prefers-color-scheme: dark) {
+              .console-upgrade-notice { background:#422006; border-color:#92400e; }
+              .console-upgrade-notice span { color:#fcd34d; }
+              .console-upgrade-notice button { color:#fcd34d; }
+            }
+          </style>
+          <span>
+            💡 Branding config is set but requires a paid license. <strong>Upgrade to unlock custom branding.</strong>
+          </span>
+          <button phx-click="dismiss_upgrade_notice">✕</button>
+        </div>
+      <% end %>
 
       <%= for {group, routes} <- @filtered_routes || @grouped_routes do %>
         <% mutable_in_group = Enum.filter(routes, & &1.mutable) %>
@@ -645,6 +672,18 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
 
   defp username(socket), do: socket.assigns.current_user.username
   defp is_admin?(socket), do: socket.assigns.current_user.role == :admin
+
+  defp tier_label(:paid), do: "PRO"
+  defp tier_label(:free), do: "FREE"
+
+  defp tier_badge_style(:paid), do: "background:#dbeafe;color:#1e40af;"
+  defp tier_badge_style(:free), do: "background:#e5e7eb;color:#374151;"
+
+  defp upgrade_notice? do
+    has_config = Application.get_env(:api_management_console, :app_name) ||
+                 Application.get_env(:api_management_console, :hide_powered_by)
+    has_config && not Features.enabled?(:company_branding)
+  end
 
   defp load_dashboard(socket) do
     router = socket.router

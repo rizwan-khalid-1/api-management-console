@@ -2,25 +2,30 @@ defmodule ApiManagementConsoleV2.Branding do
   @moduledoc """
   Company branding configuration for the API Management Console.
 
+  Requires a paid license to use custom values.
+
   ## Configuration
 
-      config :api_management_console, :branding,
+      config :api_management_console,
         app_name: "Acme Corp API Console",
-        primary_color: "#FF6B35",
         hide_powered_by: true
   """
 
-  @defaults %{
-    app_name: "API Management Console",
-    primary_color: "#3b82f6",
-    hide_powered_by: false
-  }
+  alias ApiManagementConsoleV2.Features
 
-  def config do
-    Map.merge(@defaults, Application.get_env(:api_management_console, :branding, %{}))
+  def app_name do
+    if Features.enabled?(:company_branding) do
+      Application.get_env(:api_management_console, :app_name, "API Management Console")
+    else
+      "API Management Console"
+    end
   end
 
-  def app_name, do: config().app_name
-  def primary_color, do: config().primary_color
-  def hide_powered_by?, do: config().hide_powered_by
+  def hide_powered_by? do
+    if Features.enabled?(:company_branding) do
+      Application.get_env(:api_management_console, :hide_powered_by, false)
+    else
+      false
+    end
+  end
 end
