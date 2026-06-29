@@ -7,15 +7,6 @@ defmodule ApiManagementConsoleV2.AuditLog.Store do
 
   @db_name :api_audit_db
 
-  defp data_dir do
-    dir = Application.get_env(:api_management_console, :storage_dir, "api-console-data")
-    Path.join(dir, "api_audit")
-  end
-
-  def start_link(_opts \\ []) do
-    CubDB.start_link(data_dir: data_dir(), name: @db_name)
-  end
-
   def append(entry) do
     # Use timestamp + random suffix as unique key
     key = "#{System.system_time(:millisecond)}_#{:rand.uniform(999_999)}"

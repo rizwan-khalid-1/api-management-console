@@ -8,15 +8,6 @@ defmodule ApiManagementConsoleV2.RoutePolicies.Store do
   @db_name :api_policies_db
   @hidden_prefix "__hidden__"
 
-  defp data_dir do
-    dir = Application.get_env(:api_management_console, :storage_dir, "api-console-data")
-    Path.join(dir, "api_policies")
-  end
-
-  def start_link(_opts \\ []) do
-    CubDB.start_link(data_dir: data_dir(), name: @db_name)
-  end
-
   def all do
     CubDB.select(@db_name)
     |> Stream.reject(fn {k, _} -> is_binary(k) and String.starts_with?(k, @hidden_prefix) end)

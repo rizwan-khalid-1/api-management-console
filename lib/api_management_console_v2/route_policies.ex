@@ -91,9 +91,6 @@ defmodule ApiManagementConsoleV2.RoutePolicies do
 
   @impl true
   def init(_opts) do
-    Store.start_link()
-    ApiManagementConsoleV2.AuditLog.Store.start_link()
-    ApiManagementConsoleV2.Accounts.Store.start_link()
     ApiManagementConsoleV2.Accounts.ensure_admin_exists()
     {:ok, nil}
   end

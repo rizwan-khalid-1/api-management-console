@@ -43,18 +43,11 @@
 1. Replace DETS with CubDB — ACID transactions, crash-safe, concurrent reads, zero config
 2. RBAC — Admin/Viewer roles, session-based login, account management, centralized admin guard
 3. Licensing Module — offline JWT validation, trial support, scalable feature flags (Features.enabled?/1), FREE/PRO badge in header
+4. CubDB Supervision — Supervisor with auto-restart on crash, zero downtime
 
 ## Phase 5 — Next Steps
 
-### 1. Move CubDB to Supervision Tree
-
-Currently CubDB processes are lazy-started on first access. If a CubDB process crashes, requests fail until the next access re-starts it.
-
-- **Fix:** Start all CubDB processes in the application's supervision tree with `restart: :permanent`
-- **Benefit:** Auto-restart on crash, zero downtime between failures
-- **Files:** Add `application.ex` with a Supervisor
-
-### 2. Paid Features — Implement & Gate
+### 1. Paid Features — Implement & Gate
 
 Uncomment and build the remaining paid-only features:
 
@@ -63,7 +56,7 @@ Uncomment and build the remaining paid-only features:
 - **`postgresql_storage`** — PostgreSQL backend option
 - **`slack_notifications`** — webhook alerts on policy changes
 
-### 3. Free Tier Limits (Enforce)
+### 2. Free Tier Limits (Enforce)
 
 Add enforcement for existing free-tier caps:
 

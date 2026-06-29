@@ -14,7 +14,10 @@ defmodule ApiManagementConsoleV2.MixProject do
   end
 
   def application do
-    [extra_applications: [:logger]]
+    [
+      extra_applications: [:logger],
+      mod: {ApiManagementConsoleV2.Application, []}
+    ]
   end
 
   defp deps do
