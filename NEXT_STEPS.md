@@ -66,11 +66,18 @@ Add enforcement for existing free-tier caps:
 
 ---
 
-## Upcoming (Complex — Later)
+## Phase 6 — Robustness
 
-- Scheduled toggles
-- PostgreSQL storage
-- handle limited routes in free version
+### 1. Concurrent Toggle Handling
+
+If two users toggle the same endpoint simultaneously, the logs should reflect both actions deterministically. Currently CubDB writes are not atomic read-then-write — a race could lose intermediate state.
+
+- **Fix:** Use CubDB transactions for toggle operations
+- **Benefit:** Deterministic audit trail even under concurrent use, no lost state
+
+---
+
+## Upcoming (Complex — Later)
 
 ---
 

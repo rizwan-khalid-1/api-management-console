@@ -8,7 +8,7 @@ defmodule ApiManagementConsoleV2.MixProject do
       elixir: "~> 1.13",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      description: "A simple API route discovery tool for Phoenix apps",
+      description: "A Phoenix LiveView library for real-time API route management",
       package: package()
     ]
   end
