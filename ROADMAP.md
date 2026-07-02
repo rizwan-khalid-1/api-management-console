@@ -57,16 +57,12 @@ Public roadmap for the API Management Console library. See what's done, what's n
 ## 🐛 Known Issues
 
 - **Toggle buttons don't work on static sites** — `<button phx-click>` requires LiveView WebSocket. Consumers without LiveView JS (`--no-assets` apps) get dead render with non-functional toggles. Fallback via query params (page reload) works but isn't fully implemented for all actions.
+### Storage
+- CubDB transactions for all toggle mutations (atomic read+write, no lost state on concurrent toggles)
 
 ---
 
 ## 📅 Planned
-
-### Concurrent Toggle Handling
-If two users toggle the same endpoint simultaneously, the logs should reflect both actions deterministically. Currently CubDB writes are not atomic read-then-write — a race could lose intermediate state.
-
-- **Fix:** Use CubDB transactions for toggle operations
-- **Benefit:** Deterministic audit trail even under concurrent use, no lost state
 
 ### Paid Features — Implement & Gate
 Build the remaining paid-only features (currently commented out in `features.ex`):

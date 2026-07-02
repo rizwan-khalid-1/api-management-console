@@ -41,20 +41,20 @@ defmodule ApiManagementConsoleV2.RoutePolicies do
     |> List.flatten()
   end
 
-  @doc "Toggle a single route by key."
+  @doc "Toggle a single route by key. Returns the old state."
   def set_route_enabled(route_key, enabled) when is_binary(route_key) and is_boolean(enabled) do
     log("[ApiPolicies] set_route_enabled — key=#{route_key}, enabled=#{enabled}")
-    Store.put(route_key, enabled)
+    Store.toggle(route_key, enabled)
   end
 
-  @doc "Toggle all mutable routes in a group."
+  @doc "Toggle all mutable routes in a group. Returns [{key, old_state}]."
   def set_group_enabled(router, group, enabled) do
     router
     |> list_grouped_routes()
     |> Map.get(group, [])
     |> Enum.filter(& &1.mutable)
-    |> Enum.map(&{&1.key, enabled})
-    |> Store.bulk_put()
+    |> Enum.map(& &1.key)
+    |> Store.toggle_group(enabled)
   end
 
   @doc "Reset all policies — delete DETS file."

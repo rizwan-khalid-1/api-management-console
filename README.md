@@ -190,7 +190,7 @@ $ mix phx.server
 | Session Login | Secure login page with session-based authentication |
 | RBAC | Admin and Viewer roles — admins toggle, viewers read-only |
 | Account Management | Add/remove users, change roles, up to 5 users |
-| CubDB Storage | Embedded key-value store — crash-safe, zero config |
+| CubDB Storage | Embedded key-value store — crash-safe, zero config, ACID atomic toggles |
 | Grouped Routes | Routes organized by controller name, toggleable to flat view |
 | Search & Filter | Instant search by path, method, or controller name |
 | Health Bar | Visual progress bar showing enabled vs disabled ratio |

@@ -873,12 +873,15 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
   end
 
   defp apply_route_cap(groups) do
+    # Sort groups alphabetically for deterministic ordering
+    ordered_groups = Enum.sort_by(groups, fn {name, _} -> name end)
+
     case Features.max_routes() do
       :unlimited -> {groups, [], 0}
       cap ->
         # Flatten all mutable routes (preserving order within groups)
         all_routes =
-          groups
+          ordered_groups
           |> Enum.flat_map(fn {_group, routes} -> routes end)
           |> Enum.filter(& &1.mutable)
 

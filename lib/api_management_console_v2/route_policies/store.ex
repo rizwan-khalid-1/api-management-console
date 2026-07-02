@@ -17,14 +17,45 @@ defmodule ApiManagementConsoleV2.RoutePolicies.Store do
   end
 
   def put(key, enabled) do
-    log("[ApiStore] put — key=#{key}, enabled=#{enabled}")
-    CubDB.put(@db_name, key, enabled)
-    :ok
+    toggle(key, enabled)
+  end
+
+  def toggle(key, enabled) do
+    log("[ApiStore] toggle — key=#{key}, enabled=#{enabled}")
+
+    CubDB.transaction(@db_name, fn tx ->
+      current = CubDB.Tx.get(tx, key)
+      tx = CubDB.Tx.put(tx, key, enabled)
+      {:commit, tx, current}
+    end)
+  end
+
+  def toggle_group(keys, enabled) when is_list(keys) do
+    log("[ApiStore] toggle_group — keys=#{length(keys)}, enabled=#{enabled}")
+
+    CubDB.transaction(@db_name, fn tx ->
+      {tx, results} =
+        Enum.reduce(keys, {tx, []}, fn key, {tx, acc} ->
+          current = CubDB.Tx.get(tx, key)
+          tx = CubDB.Tx.put(tx, key, enabled)
+          {tx, [{key, current} | acc]}
+        end)
+
+      {:commit, tx, Enum.reverse(results)}
+    end)
   end
 
   def bulk_put(updates) when is_list(updates) do
-    CubDB.put_multi(@db_name, Map.new(updates))
-    :ok
+    CubDB.transaction(@db_name, fn tx ->
+      {tx, results} =
+        Enum.reduce(updates, {tx, []}, fn {key, enabled}, {tx, acc} ->
+          current = CubDB.Tx.get(tx, key)
+          tx = CubDB.Tx.put(tx, key, enabled)
+          {tx, [{key, current} | acc]}
+        end)
+
+      {:commit, tx, Enum.reverse(results)}
+    end)
   end
 
   def reset_all do
