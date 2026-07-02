@@ -251,20 +251,7 @@ Offline JWT validation — no phone-home, no external server dependency.
 
 No license key = Free tier. All paid features degrade gracefully — limits are enforced, upgrade prompts appear where applicable.
 
-**To generate a test license key for local development:**
-
-```bash
-# 1. Generate RSA key pair
-openssl genrsa -out private_key.pem 2048
-openssl rsa -in private_key.pem -pubout -out priv/keys/public_key.pem
-
-# 2. Generate a JWT in IEx:
-iex> private_key = File.read!("private_key.pem")
-iex> signer = Joken.Signer.create("RS256", %{"pem" => private_key})
-iex> claims = %{"tier" => "paid", "expires_at" => Date.utc_today() |> Date.add(365) |> Date.to_iso8601()}
-iex> {:ok, token} = Joken.generate_and_sign(claims, signer)
-iex> IO.puts(token)  # Use this as your API_CONSOLE_LICENSE_KEY
-```
+License keys are issued by the library maintainer. Contact the author to obtain a key for your organization.
 
 ---
 
@@ -285,6 +272,12 @@ iex> IO.puts(token)  # Use this as your API_CONSOLE_LICENSE_KEY
 | `joken` (~> 2.6) | JWT verification for offline license validation |
 | `phoenix` (optional) | Web framework integration |
 | `phoenix_live_view` (optional) | Real-time dashboard UI |
+
+---
+
+## Roadmap
+
+See [ROADMAP.md](./ROADMAP.md) for completed features, planned work, and known issues.
 
 ---
 
