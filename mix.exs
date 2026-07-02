@@ -8,7 +8,7 @@ defmodule ApiManagementConsoleV2.MixProject do
       elixir: "~> 1.13",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      description: "A Phoenix LiveView library for real-time API route management",
+      description: "A Phoenix LiveView library for real-time API route management — discover, toggle, audit, and guard your routes from a dashboard",
       package: package()
     ]
   end
@@ -22,7 +22,7 @@ defmodule ApiManagementConsoleV2.MixProject do
 
   defp deps do
     [
-      {:phoenix, "~> 1.6 or ~> 1.7", optional: true},
+      {:phoenix, "~> 1.6 or ~> 1.7 or ~> 1.8", optional: true},
       {:phoenix_live_view, "~> 0.20 or ~> 1.0", optional: true},
       {:cubdb, "~> 2.0"},
       {:bcrypt_elixir, "~> 3.0"},

@@ -1,17 +1,24 @@
 defmodule ApiManagementConsoleV2 do
   @moduledoc """
-  A simple library to discover and list routes from a Phoenix application's router.
+  A Phoenix LiveView library for real-time API route management.
+
+  Discover routes, toggle them on/off, enforce via a Plug, with RBAC,
+  audit logs, and a licensing model (Free/PRO).
 
   ## Installation
 
   Add to your `mix.exs`:
 
-      {:api_management_console_v2, path: "/path/to/api_management_console_v2"}
+      {:api_management_console, github: "rizwankhalid/api_management_console"}
 
   ## Usage
 
-      iex> ApiManagementConsoleV2.list_routes(MyAppWeb.Router)
-      [%{path: "/", method: "GET", controller: MyAppWeb.PageController, action: :index}, ...]
+      use ApiManagementConsoleV2.Router
+
+      scope "/" do
+        pipe_through [:browser, :route_guard]
+        api_console "/admin/api-console"
+      end
   """
 
   @doc """

@@ -57,6 +57,10 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
       |> assign(:show_accounts, false)
       |> assign(:account_list, [])
       |> assign(:show_upgrade_notice, upgrade_notice?())
+      |> assign(:show_plans_modal, false)
+      |> assign(:show_user_limit_popup, false)
+      |> assign(:teaser_routes, [])
+      |> assign(:routes_over_cap, 0)
 
     {:ok, load_dashboard(socket)}
   end
@@ -255,6 +259,18 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
     {:noreply, assign(socket, show_upgrade_notice: false)}
   end
 
+  defp do_handle_event("show_plans_modal", _params, socket) do
+    {:noreply, assign(socket, show_plans_modal: true, show_user_limit_popup: false)}
+  end
+
+  defp do_handle_event("close_plans_modal", _params, socket) do
+    {:noreply, assign(socket, show_plans_modal: false)}
+  end
+
+  defp do_handle_event("dismiss_user_limit_popup", _params, socket) do
+    {:noreply, assign(socket, show_user_limit_popup: false)}
+  end
+
   defp do_handle_event("toggle_accounts", _params, socket) do
     if socket.assigns.show_accounts do
       {:noreply, assign(socket, show_accounts: false)}
@@ -264,15 +280,19 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
   end
 
   defp do_handle_event("add_account", %{"username" => username, "password" => password, "role" => role}, socket) do
-    role_atom = String.to_existing_atom(role)
+    if Accounts.can_create?() do
+      role_atom = String.to_existing_atom(role)
 
-    case Accounts.create(username, password, role_atom) do
-      :ok ->
-        AuditLog.append(username(socket), "add_account", username, nil, nil)
-        {:noreply, assign(socket, account_list: Accounts.list())}
+      case Accounts.create(username, password, role_atom) do
+        :ok ->
+          AuditLog.append(username(socket), "add_account", username, nil, nil)
+          {:noreply, assign(socket, account_list: Accounts.list())}
 
-      {:error, _} ->
-        {:noreply, socket}
+        {:error, _} ->
+          {:noreply, socket}
+      end
+    else
+      {:noreply, assign(socket, show_user_limit_popup: true)}
     end
   end
 
@@ -424,6 +444,16 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
         @media (prefers-color-scheme: dark) {
           .console-modal { background: #1e293b; color: #e2e8f0; }
         }
+        .console-teaser-wrap { position: relative; max-height: 220px; overflow: hidden; border-radius: 16px; margin-bottom: 1rem; }
+        .console-teaser-wrap::after { content: ""; position: absolute; bottom: 0; left: 0; right: 0; height: 120px; background: linear-gradient(to bottom, transparent 0%, rgba(249,250,251,0.85) 40%, rgba(249,250,251,1) 100%); pointer-events: none; border-radius: 0 0 16px 16px; }
+        @media (prefers-color-scheme: dark) {
+          .console-teaser-wrap::after { background: linear-gradient(to bottom, transparent 0%, rgba(15,23,42,0.85) 40%, rgba(15,23,42,1) 100%); }
+        }
+        .console-teaser-lock { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; z-index: 5; }
+        .console-teaser-lock svg { width: 22px; height: 22px; color: #9ca3af; }
+        .console-teaser-lock-text { font-size: 0.8rem; font-weight: 600; color: #6b7280; }
+        .console-teaser-lock-btn { background: linear-gradient(135deg, #3b82f6, #8b5cf6); color: #fff; border: none; padding: 0.4rem 1.25rem; border-radius: 8px; font-size: 0.78rem; font-weight: 700; cursor: pointer; box-shadow: 0 2px 12px rgba(59,130,246,0.3); }
+        .console-teaser-lock-btn:hover { opacity: 0.9; }
       </style>
 
       <div class="console-card">
@@ -448,6 +478,7 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
               <span style={"font-size:0.65rem;font-weight:600;padding:2px 8px;border-radius:4px;" <> tier_badge_style(License.get_tier())}>
                 <%= tier_label(License.get_tier()) %>
               </span>
+              <button phx-click="show_plans_modal" style="font-size:0.7rem;color:#3b82f6;background:none;border:1px solid #3b82f6;border-radius:6px;padding:2px 8px;cursor:pointer;">Compare Plans</button>
             </div>
           </div>
           <div class="console-stats">
@@ -541,6 +572,34 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
               </span>
             </div>
           <% end %>
+        </div>
+      <% end %>
+
+      <%= if @routes_over_cap > 0 do %>
+        <div class="console-teaser-wrap">
+          <div style="padding:0.75rem 0;">
+            <%= for route <- @teaser_routes do %>
+              <div class={"console-route-row " <> if(route.enabled, do: "console-route-enabled", else: "console-route-disabled")} style="pointer-events:none;opacity:0.55;">
+                <div class="console-route-left">
+                  <div class="console-route-meta">
+                    <span class="console-method-badge"><%= route.method %></span>
+                    <span class="console-stat-label"><%= route.controller %>.<%= route.action %></span>
+                  </div>
+                  <p class="console-route-path"><%= route.path %></p>
+                </div>
+                <span class="console-toggle console-toggle-immutable">
+                  <span class="console-toggle-knob console-toggle-knob-on" />
+                </span>
+              </div>
+            <% end %>
+          </div>
+          <div class="console-teaser-lock">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+            </svg>
+            <span class="console-teaser-lock-text"><%= @routes_over_cap %> route<%= if @routes_over_cap > 1, do: "s", else: "" %> hidden</span>
+            <button phx-click="show_plans_modal" class="console-teaser-lock-btn">Upgrade to PRO</button>
+          </div>
         </div>
       <% end %>
 
@@ -665,6 +724,65 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
         </div>
       </div>
     <% end %>
+
+    <%= if @show_plans_modal do %>
+      <div class="console-modal-overlay">
+        <div class="console-modal" phx-click-away="close_plans_modal" style="min-width:500px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+            <h3 style="margin:0;">Compare Plans</h3>
+            <button phx-click="close_plans_modal" style="border:none;background:none;cursor:pointer;font-size:1.2rem;color:inherit;">✕</button>
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+            <thead>
+              <tr style="border-bottom:1px solid #e5e7eb;">
+                <th style="text-align:left;padding:0.5rem;">Feature</th>
+                <th style={"text-align:center;padding:0.5rem;" <> if(License.get_tier() == :free, do: "color:#3b82f6;font-weight:700;", else: "")}>
+                  Free
+                  <%= if License.get_tier() == :free do %>
+                    <svg style="display:inline;width:16px;height:16px;vertical-align:middle;margin-left:2px;" fill="none" stroke="#16a34a" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                  <% end %>
+                </th>
+                <th style={"text-align:center;padding:0.5rem;" <> if(License.get_tier() == :paid, do: "color:#8b5cf6;font-weight:700;", else: "")}>
+                  PRO
+                  <%= if License.get_tier() == :paid do %>
+                    <svg style="display:inline;width:16px;height:16px;vertical-align:middle;margin-left:2px;" fill="none" stroke="#16a34a" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                  <% end %>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <%= for item <- Features.comparison() do %>
+                <tr style="border-bottom:1px solid #f1f5f9;">
+                  <td style="padding:0.6rem 0.5rem;"><%= item.name %></td>
+                  <td style={"text-align:center;padding:0.6rem 0.5rem;" <> if(License.get_tier() == :free, do: "font-weight:600;color:#16a34a;", else: "")}><%= item.free %></td>
+                  <td style={"text-align:center;padding:0.6rem 0.5rem;" <> if(License.get_tier() == :paid, do: "font-weight:600;color:#16a34a;", else: "")}><%= item.paid %></td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+          <p style="font-size:0.7rem;color:#9ca3af;margin-top:1rem;text-align:center;">
+            <%= if License.get_tier() == :paid do %>
+              ✅ You are on the <strong>PRO</strong> plan
+            <% else %>
+              You are on the <strong>Free</strong> plan — <button phx-click="close_plans_modal" style="color:#3b82f6;background:none;border:none;cursor:pointer;font-size:0.7rem;">upgrade to PRO</button>
+            <% end %>
+          </p>
+        </div>
+      </div>
+    <% end %>
+
+    <%= if @show_user_limit_popup do %>
+      <div class="console-modal-overlay">
+        <div class="console-modal" style="text-align:center;max-width:360px;">
+          <h3 style="margin-top:0;">🔒 User Limit Reached</h3>
+          <p style="font-size:0.85rem;color:#6b7280;">Free tier is limited to <%= Features.max_admins() %> users. Upgrade to PRO for unlimited accounts.</p>
+          <div style="display:flex;gap:0.5rem;margin-top:1rem;justify-content:center;">
+            <button phx-click="dismiss_user_limit_popup" class="console-group-btn">Dismiss</button>
+            <button phx-click="show_plans_modal" class="console-bulk-btn console-bulk-enable">Upgrade to PRO</button>
+          </div>
+        </div>
+      </div>
+    <% end %>
     """
   end
 
@@ -744,9 +862,65 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
 
     log("[ApiConsole] search — query=#{inspect(query)}, groups=#{map_size(final)}, total=#{stats_for(final).total}")
 
+    # Apply route cap for free tier
+    {capped_groups, teaser_routes, over_cap} = apply_route_cap(final)
+
     socket
-    |> assign(:filtered_routes, final)
+    |> assign(:filtered_routes, capped_groups)
     |> assign(:stats, stats_for(all_routes))
+    |> assign(:teaser_routes, teaser_routes)
+    |> assign(:routes_over_cap, over_cap)
+  end
+
+  defp apply_route_cap(groups) do
+    case Features.max_routes() do
+      :unlimited -> {groups, [], 0}
+      cap ->
+        # Flatten all mutable routes (preserving order within groups)
+        all_routes =
+          groups
+          |> Enum.flat_map(fn {_group, routes} -> routes end)
+          |> Enum.filter(& &1.mutable)
+
+        total = length(all_routes)
+
+        if total <= cap do
+          {groups, [], 0}
+        else
+          # Routes 1..cap-3 → visible in groups
+          # Routes cap-2..cap → teaser (blurred)
+          # Routes cap+1..end → hidden entirely
+          visible_count = max(cap - 3, 0)
+          teaser_count = min(3, cap - visible_count)
+
+          visible_keys =
+            all_routes
+            |> Enum.take(visible_count)
+            |> Enum.map(& &1.key)
+            |> MapSet.new()
+
+          teaser_routes =
+            all_routes
+            |> Enum.drop(visible_count)
+            |> Enum.take(teaser_count)
+
+          over_cap = total - cap
+
+          capped_groups =
+            Map.new(groups, fn {group, routes} ->
+              filtered =
+                Enum.filter(routes, fn r ->
+                  not r.mutable or MapSet.member?(visible_keys, r.key)
+                end)
+
+              {group, filtered}
+            end)
+            |> Enum.reject(fn {_, routes} -> routes == [] end)
+            |> Map.new()
+
+          {capped_groups, teaser_routes, over_cap}
+        end
+    end
   end
 
   defp stats_for(grouped_routes), do: compute_stats(grouped_routes)

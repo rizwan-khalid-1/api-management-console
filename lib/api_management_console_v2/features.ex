@@ -93,6 +93,49 @@ defmodule ApiManagementConsoleV2.Features do
   @doc "Returns the license expiry date if set."
   def expires_at, do: License.expires_at()
 
+  @doc """
+  Returns a feature comparison matrix for the Plans modal.
+
+  Each entry has:
+    - `:name` — feature display name
+    - `:free` — what free tier gets
+    - `:paid` — what paid tier gets
+  """
+  def comparison do
+    [
+      %{name: "Managed Routes",     free: "Up to #{@free_max_routes}", paid: "Unlimited"},
+      %{name: "User Accounts",      free: "Up to #{@free_max_users}", paid: "Unlimited"},
+      %{name: "Audit Log History",  free: "#{@free_audit_days} days", paid: "Unlimited"},
+      %{name: "Company Branding",   free: "—", paid: "✓"},
+      %{name: "Scheduled Toggles",  free: "—", paid: "✓ (coming soon)"},
+      %{name: "Slack Notifications",free: "—", paid: "✓ (coming soon)"},
+    ]
+  end
+
+  @doc "Returns true if route count exceeds free tier limit."
+  def at_route_limit?(total_routes) do
+    case max_routes() do
+      :unlimited -> false
+      max -> total_routes > max
+    end
+  end
+
+  @doc "Returns the integer cap or the total, whichever is smaller."
+  def capped_route_count(total_routes) do
+    case max_routes() do
+      :unlimited -> total_routes
+      max -> min(total_routes, max)
+    end
+  end
+
+  @doc "Number of routes hidden beyond the cap."
+  def routes_over_cap(total_routes) do
+    case max_routes() do
+      :unlimited -> 0
+      max -> max(total_routes - max, 0)
+    end
+  end
+
   # --- Private ---
 
   defp tier_satisfies?(:paid, :free), do: true

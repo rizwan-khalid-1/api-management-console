@@ -2,8 +2,9 @@ defmodule ApiManagementConsoleV2.Router do
   @moduledoc """
   Provides the `api_console/1` macro to mount console routes into a Phoenix router.
 
-  The macro is transparent — it only defines routes under the given path
-  with Basic Auth protection. You control the outer pipeline and scoping.
+  The macro is transparent — it defines login routes and protected dashboard routes
+  under the given path with session-based authentication. The consumer controls the
+  outer pipeline and scoping.
 
   ## Using the macro
 
@@ -15,7 +16,7 @@ defmodule ApiManagementConsoleV2.Router do
         api_console "/admin/apis"
       end
 
-  ## Manually (no macro)
+  ## Manual setup (no macro)
 
   See the README for a manual route listing if you prefer full control.
   """
@@ -45,8 +46,8 @@ defmodule ApiManagementConsoleV2.Router do
   @doc """
   Mounts the API console LiveView dashboard under the given path.
 
-  Routes are wrapped with the `:api_console_auth` pipeline (HTTP Basic Auth).
-  Credentials are read from `API_CONSOLE_ADMIN_USERNAME` / `API_CONSOLE_ADMIN_PASSWORD`.
+  Routes are wrapped with the `:api_console_auth` pipeline (session-based auth).
+  Credentials are managed via the login page (default: admin / admin123).
   """
   defmacro api_console(path) do
     quote bind_quoted: [path: path] do

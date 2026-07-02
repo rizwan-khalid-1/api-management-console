@@ -9,11 +9,13 @@ A Phoenix LiveView library that gives you real-time control over your backend ro
 ## What It Does
 
 - **Route Discovery** — Automatically pulls every route from your Phoenix router
-- **Grouped Management** — Routes organized by namespace/module so you can toggle in bulk
-- **One-Click Toggles** — Enable or disable individual routes or entire groups instantly
-- **Guard Plug Enforcement** — Disabled routes return `403` at the Plug level, before they hit your controller
-- **Persistent State** — Route policy stored locally via CubDB (embedded key-value store, crash-safe)
-- **Protected Console** — Session-based login with admin/viewer roles, account management
+- **Grouped Management** — Routes organized by controller name so you can toggle in bulk
+- **One-Click Toggles** — Enable or disable individual routes or entire groups instantly via LiveView
+- **Route Guard Plug** — Disabled routes return `403` at the Plug level, before they hit your controller
+- **Session-Based Login** — Secure login page with admin/viewer role-based access control
+- **Account Management** — Add/remove users, set roles (admin/viewer) directly from the dashboard
+- **Persistent State** — Route policies, accounts, and audit logs stored via CubDB (crash-safe, ACID)
+- **Audit Log** — Every toggle, hide, and account change logged with who/what/when — expandable with pagination and CSV download
 
 ---
 
@@ -24,7 +26,7 @@ A Phoenix LiveView library that gives you real-time control over your backend ro
 | Emergency API shutdown | 30–60 min (find team, redeploy) | 5 seconds, one click |
 | Peak traffic load shedding | SSH, edit configs, restart services | Dashboard on second monitor, instant |
 | Security vulnerability exposure | 45 min (CI/CD + deploy) | Disable endpoint immediately |
-| Maintenance window scheduling | Wake up at 2am or write custom scripts | Schedule it and sleep |
+| Maintenance window | Wake up at 2am or write custom scripts | Toggle it and sleep |
 | Compliance (GDPR data freeze) | Days of discovery and code changes | One click to disable all tagged routes |
 
 ---
@@ -44,28 +46,26 @@ let liveSocket = new LiveSocket("/live", Socket, { params: { _csrf_token: csrfTo
 liveSocket.connect()
 ```
 
-If your app was scaffolded without this (e.g. `--no-assets`), you'll need to add it for live toggles. Without it, the console falls back to dead render only.
+If your app was scaffolded without this (e.g. `--no-assets`), toggles fall back to page-reload mode via query parameters.
 
 ### Install
 
 ```elixir
-# 1. Add the dependency (Git for now — Hex package coming soon)
+# Add the dependency (Git for now — Hex package coming soon)
 def deps do
   [
     {:api_management_console, github: "rizwankhalid/api_management_console"}
   ]
 end
 
-# 2. Install
+# Install
 $ mix deps.get
 ```
 
 ### Mount the console in your router
 
-**Option A — Use the `api_console` macro (quickest)**
-
 ```elixir
-# In your router — `use` injects the route guard + auth pipeline automatically.
+# In your router — `use` injects route guard + auth pipelines automatically
 use ApiManagementConsoleV2.Router
 
 scope "/" do
@@ -75,11 +75,11 @@ end
 ```
 
 That's it. The `use` macro automatically:
-- Defines `:route_guard` pipeline — blocks disabled routes (403)
-- Defines the `:api_console_auth` pipeline (Basic Auth)
-- Imports the `api_console` macro
+- Defines the `:route_guard` pipeline — blocks disabled routes with `403`
+- Defines the `:api_console_auth` pipeline — session-based login protection
+- Registers the `api_console/1` macro to mount dashboard routes under your chosen path
 
-**To enforce disabled routes**, add `:route_guard` to **every scope** you want protected — including API and browser routes, not just the console:
+**To enforce disabled routes**, add `:route_guard` to **every scope** you want protected:
 
 ```elixir
 scope "/", SampleBlogWeb do
@@ -93,7 +93,7 @@ scope "/api", SampleBlogWeb do
 end
 ```
 
-Or add the plug directly inside each pipeline:
+Or add the plug directly inside any pipeline:
 
 ```elixir
 pipeline :api do
@@ -101,7 +101,9 @@ pipeline :api do
 end
 ```
 
-The console uses session-based authentication. A default admin account is created on first use:
+### Default login
+
+The console uses session-based authentication. A default admin account is auto-created on first access:
 
 - **Username:** `admin`
 - **Password:** `admin123`
@@ -113,7 +115,9 @@ export API_CONSOLE_ADMIN_USERNAME=admin
 export API_CONSOLE_ADMIN_PASSWORD=your_password
 ```
 
-### Configuration
+---
+
+## Configuration
 
 All settings under a single config key:
 
@@ -129,39 +133,44 @@ config :api_management_console,
   # Storage path (default: "api-console-data/")
   storage_dir: "/var/data/api_console",
 
-  # Company branding
+  # Company branding (requires paid license — see Licensing below)
   app_name: "Acme Corp API Console",
   hide_powered_by: true,
 
   # Debug logging (default: false)
-  debug: true
+  debug: true,
+
+  # License key — unlock paid features (offline JWT validation)
+  license_key: "eyJhbGciOiJSUzI1NiIs..."
 ```
 
-**License key** — unlock paid features (offline JWT validation):
+Or set the license key via environment variable:
 
 ```bash
 export API_CONSOLE_LICENSE_KEY=eyJhbGciOiJSUzI1NiIs...
 ```
 
-**Option B — Add routes manually (full control)**
+### Manual route setup (no macro)
 
 ```elixir
-# In your router — wire it up yourself
-import Phoenix.LiveView.Router, only: [live: 3]
-
-pipeline :route_guard do
-  plug ApiManagementConsoleV2.Plugs.RouteGuard
-end
-
+# Wire it up yourself instead of using `api_console`
 scope "/admin/api-console" do
-  pipe_through [:browser, :route_guard]
-  plug ApiManagementConsoleV2Web.Plugs.RequireAdmin
+  pipe_through [:browser]
 
+  # Login routes (unauthenticated)
+  get "/login", ApiManagementConsoleV2Web.LoginController, :index
+  post "/login", ApiManagementConsoleV2Web.LoginController, :create
+
+  # Protected console routes
+  pipe_through [:api_console_auth]
+  get "/logout", ApiManagementConsoleV2Web.Plugs.Logout, []
+  get "/audit.csv", ApiManagementConsoleV2Web.Plugs.AuditDownload, []
   live "/", ApiManagementConsoleV2Web.RouteConsoleLive, :index
 end
 ```
 
 **Start your server:**
+
 ```bash
 $ mix phx.server
 # Visit http://localhost:4000/admin/api-console
@@ -171,81 +180,123 @@ $ mix phx.server
 
 ## Features
 
-### Free
-- **Route Discovery** — auto-discovers all routes from Phoenix router
-- **One-Click Toggles** — enable/disable individual routes or entire groups (up to 50 routes)
-- **Route Guard** — blocks disabled routes with 403 at the Plug level
-- **Session Login** — session-based authentication with admin/viewer roles
-- **CubDB Storage** — embedded key-value store, crash-safe, ACID transactions
-- **Grouped Routes** — routes organized by controller name, toggleable to flat view
-- **Search & Filter** — instant search by path, method, or controller name
-- **Health Bar** — visual progress bar showing enabled vs disabled ratio
-- **Protected Routes** — immutable routes (greyed out, untoggleable) via config
-- **Dark Mode** — auto-detects `prefers-color-scheme`
-- **Bulk Operations** — checkboxes, select all/clear per group, bulk enable/disable
-- **Hide Routes** — hide routes from the console view
-- **Audit Log** — every action logged, expandable with pagination, 30-day history
-- **Reset All** — one-click re-enable all routes with confirmation dialog
-- **RBAC** — Admin and Viewer roles, up to 5 users (1 admin + 4 viewers)
+### Free Tier
 
-### Paid
-- **Unlimited Routes** — no 50-route cap *(coming soon)*
-- **Unlimited Users** — no 5-user cap on RBAC *(coming soon)*
-- **Full Audit History** — no 30-day retention limit, CSV download *(coming soon)*
-- **Company Branding** — custom app name, hide powered-by footer ✅
-- **Scheduled Toggles** — schedule enable/disable at specific times *(coming soon)*
-- **PostgreSQL Storage** — multi-node consistency *(coming soon)*
-- **Slack Notifications** — alerts on policy changes *(coming soon)*
+| Feature | Description |
+|---|---|
+| Route Discovery | Auto-discovers all routes from your Phoenix router |
+| One-Click Toggles | Enable/disable individual routes or entire groups — instant via LiveView |
+| Route Guard | Blocks disabled routes with `403` at the Plug level |
+| Session Login | Secure login page with session-based authentication |
+| RBAC | Admin and Viewer roles — admins toggle, viewers read-only |
+| Account Management | Add/remove users, change roles, up to 5 users |
+| CubDB Storage | Embedded key-value store — crash-safe, zero config |
+| Grouped Routes | Routes organized by controller name, toggleable to flat view |
+| Search & Filter | Instant search by path, method, or controller name |
+| Health Bar | Visual progress bar showing enabled vs disabled ratio |
+| Protected Routes | Immutable routes (greyed out, untoggleable) via config |
+| Dark Mode | Auto-detects `prefers-color-scheme` |
+| Bulk Operations | Checkboxes, select all/clear per group, bulk enable/disable/hide |
+| Hide Routes | Hide routes from console view, restore from modal |
+| Audit Log | Every action logged with username, expandable with pagination, CSV download |
+| 30-Day Audit History | Free tier retains 30 days of audit entries |
+| Reset All | One-click re-enable all routes with confirmation dialog |
+| 50-Route Limit | Free tier manages up to 50 routes — extras shown as faded teaser |
+| Compare Plans Modal | Side-by-side Free vs PRO feature matrix with active plan highlighted |
+
+### Paid (PRO) Tier
+
+| Feature | Description |
+|---|---|
+| Company Branding | Custom app name, hide "Powered by" footer ✅ |
+| Unlimited Routes | No 50-route cap |
+| Unlimited Users | No 5-user cap on RBAC |
+| Full Audit History | No 30-day retention limit |
+| Scheduled Toggles | Schedule enable/disable at specific times *(coming soon)* |
+| PostgreSQL Storage | Multi-node consistency via Ecto *(coming soon)* |
+| Slack Notifications | Webhook alerts on policy changes *(coming soon)* |
 
 ---
 
-## Storage Options
+## Route Limit (Free Tier)
 
-| Storage | Use Case | Tier |
+When your app has more than 50 managed routes on the free tier:
+
+- **Routes 1–47** render normally — fully interactive
+- **Routes 48–50** appear in a **faded teaser container** below the groups:
+  - Dimmed, non-interactive, with a gradient blur overlay
+  - Lock icon + "X routes hidden" + "Upgrade to PRO" button
+- **Routes 51+** are hidden entirely
+
+The "Compare Plans" modal (button next to the tier badge) shows exactly what each tier includes, with the active plan highlighted in green.
+
+---
+
+## Storage
+
+| Storage | Use Case | Status |
 |---|---|---|
-| CubDB | Default — embedded, zero config, crash-safe | Free |
-| PostgreSQL | Multi-node consistency, team environments | Paid |
+| CubDB | Default — embedded, zero config, crash-safe, ACID transactions | ✅ Free |
+| PostgreSQL | Multi-node consistency, team environments | Planned (paid) |
 
 ---
 
 ## How Licensing Works
 
-Offline validation via signed JWT tokens — no phone-home, no external server dependency:
+Offline JWT validation — no phone-home, no external server dependency.
 
-1. Purchase a license
-2. Receive your license key by email (signed JWT with embedded tier, expiry, trial claims)
-3. Set `API_CONSOLE_LICENSE_KEY` in your environment
-4. Paid features unlock automatically based on the license tier
+1. Receive your license key (signed JWT with embedded tier, expiry, trial claims)
+2. Set `API_CONSOLE_LICENSE_KEY` env var or `license_key` in config
+3. Paid features unlock automatically based on the license tier
 
-Free tier is always available without a key.
+No license key = Free tier. All paid features degrade gracefully — limits are enforced, upgrade prompts appear where applicable.
+
+**To generate a test license key for local development:**
+
+```bash
+# 1. Generate RSA key pair
+openssl genrsa -out private_key.pem 2048
+openssl rsa -in private_key.pem -pubout -out priv/keys/public_key.pem
+
+# 2. Generate a JWT in IEx:
+iex> private_key = File.read!("private_key.pem")
+iex> signer = Joken.Signer.create("RS256", %{"pem" => private_key})
+iex> claims = %{"tier" => "paid", "expires_at" => Date.utc_today() |> Date.add(365) |> Date.to_iso8601()}
+iex> {:ok, token} = Joken.generate_and_sign(claims, signer)
+iex> IO.puts(token)  # Use this as your API_CONSOLE_LICENSE_KEY
+```
 
 ---
 
 ## Requirements
 
 - Elixir ~> 1.13
-- Phoenix ~> 1.6 or ~> 1.7
+- Phoenix ~> 1.6, ~> 1.7, or ~> 1.8
 - Erlang/OTP
 
 ---
 
-## Documentation
+## Dependencies
 
-Documentation is available in the `lib/` source and will be published to HexDocs once the package ships.
+| Dependency | Purpose |
+|---|---|
+| `cubdb` (~> 2.0) | Embedded key-value store for policies, accounts, audit logs |
+| `bcrypt_elixir` (~> 3.0) | Password hashing for account management |
+| `joken` (~> 2.6) | JWT verification for offline license validation |
+| `phoenix` (optional) | Web framework integration |
+| `phoenix_live_view` (optional) | Real-time dashboard UI |
 
 ---
 
 ## License
 
-- **Free Tier**: MIT License — use, modify, distribute freely
-- **Paid Tier**: Commercial license — requires a valid license key (set `API_CONSOLE_LICENSE_KEY`)
+MIT License — use, modify, distribute freely. Paid features are unlocked via a signed JWT license key, not a separate software license.
 
 ---
 
 ## Community
 
 - [GitHub Issues](https://github.com/rizwankhalid/api_management_console) — Bug reports & feature requests
-- Discussions — Coming soon
 
 ---
 

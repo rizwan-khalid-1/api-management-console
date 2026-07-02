@@ -45,28 +45,21 @@
 3. Licensing Module — offline JWT validation, trial support, scalable feature flags (Features.enabled?/1), FREE/PRO badge in header
 4. CubDB Supervision — Supervisor with auto-restart on crash, zero downtime
 
-## Phase 5 — Next Steps
+## ✅ Phase 5 — Done
 
-### 1. Paid Features — Implement & Gate
+### 1. Free Tier Limits (Enforced)
 
-Uncomment and build the remaining paid-only features:
+- **50 route max** — visible cap with fade-to-lock teaser (last 3 routes blurred with lock overlay + upgrade CTA)
+- **5 user max** — `Accounts.can_create?/0` gate + upgrade popup in UI
+- **30-day audit cap** — retention filter in `AuditLog.Store.list/2` (applies to UI and CSV download)
 
-- **`unlimited_routes`** — enforce 50-route cap on free tier, unlimited on paid
-- **`scheduled_toggles`** — schedule enable/disable at specific times
-- **`postgresql_storage`** — PostgreSQL backend option
-- **`slack_notifications`** — webhook alerts on policy changes
+### 2. Feature Comparison Modal
 
-### 2. Free Tier Limits (Enforce)
-
-Add enforcement for existing free-tier caps:
-
-- **50 route max** — show warning/inline prompt when approaching limit
-- **5 user max** — prevent adding more than 5 accounts on free tier
-- **30-day audit cap** — filter audit entries older than 30 days on free tier
+"Compare Plans" button next to tier badge → modal showing Free vs Paid feature matrix. Active plan highlighted with green checkmark and green feature values. Non-interactive modal body (only closes via ✕ or click-away).
 
 ---
 
-## Phase 6 — Robustness
+## Phase 6 — Next Up
 
 ### 1. Concurrent Toggle Handling
 
@@ -75,12 +68,24 @@ If two users toggle the same endpoint simultaneously, the logs should reflect bo
 - **Fix:** Use CubDB transactions for toggle operations
 - **Benefit:** Deterministic audit trail even under concurrent use, no lost state
 
+### 2. Paid Features — Implement & Gate
+
+Build the remaining paid-only features (currently commented out in `features.ex`):
+
+- **`scheduled_toggles`** — schedule enable/disable at specific times (needs Oban integration, schedule UI, cron storage)
+- **`postgresql_storage`** — PostgreSQL backend option via Ecto (needs schema, migration, Store adapter swap)
+- **`slack_notifications`** — webhook alerts on policy changes (needs webhook config, HTTP client, templates)
+
+### 3. Configurable Route Selection (Free Tier)
+
+Currently the free tier caps at 50 routes and shows the first 47 as toggleable + 3 as faded teaser. This is fragile — if new routes are added or the route list order changes on refresh, the set of interactive routes shifts unpredictably.
+
+- **Fix:** Let the user manually select which routes are "active" under the free tier cap. Store the selection in CubDB. Unselected routes show as immutable (greyed out) with an upgrade prompt.
+- **Benefit:** Predictable, user-controlled list of managed routes that survives refreshes and route additions.
+- **Files:** `route_console_live.ex`, `route_policies/store.ex`
+
 ---
 
 ## Upcoming (Complex — Later)
-
----
-
-## Distant Future (Phase 5+)
 
 - **SSO Integration** — OIDC/SAML login via Okta, Azure AD, Google Workspace. Needed for enterprise sales but only worth building when paying Enterprise customers request it.

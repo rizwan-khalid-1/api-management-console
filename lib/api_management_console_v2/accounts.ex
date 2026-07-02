@@ -23,6 +23,7 @@ defmodule ApiManagementConsoleV2.Accounts do
   """
 
   alias ApiManagementConsoleV2.Accounts.Store
+  alias ApiManagementConsoleV2.Features
 
   @doc "Authenticate a user. Returns {:ok, role} or {:error, reason}."
   def authenticate(username, password) when is_binary(username) and is_binary(password) do
@@ -113,5 +114,13 @@ defmodule ApiManagementConsoleV2.Accounts do
   def count_admins do
     Store.all()
     |> Enum.count(&(&1.role == :admin))
+  end
+
+  @doc "Returns true if a new account can be created (within tier limit)."
+  def can_create? do
+    case Features.max_admins() do
+      :unlimited -> true
+      max -> length(Store.all()) < max
+    end
   end
 end

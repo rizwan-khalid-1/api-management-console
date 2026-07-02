@@ -30,4 +30,10 @@ api_management_console_v2-*.tar
 .elixir-tools/
 .expert/
 .dexter/
+.elixir_ls/
+
+# Agent skills directory
+.agents/
+skills-lock.json
+
 private_key.pem
