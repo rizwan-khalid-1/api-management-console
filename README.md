@@ -6,16 +6,39 @@ A Phoenix LiveView library that gives you real-time control over your backend ro
 
 ---
 
+## Screenshots
+
+### Main Dashboard (LiveView)
+![Main Dashboard](screenshots/main-dashboard-view.png)
+
+### Main Dashboard (Static / Dead Render)
+![Main Dashboard Static](screenshots/main-dashboard-view-static-app.png)
+
+### Routes with Bulk Selection
+![Routes Checked](screenshots/routes-checked.png)
+
+### Audit Log & Account Management
+![Audit Log & Accounts](screenshots/audit-log+accounts-section.png)
+
+### Compare Plans Modal
+![Compare Plans](screenshots/compare-plans-modal.png)
+
+### Login Screen
+![Login](screenshots/login-screen.png)
+
+---
+
 ## What It Does
 
 - **Route Discovery** — Automatically pulls every route from your Phoenix router
 - **Grouped Management** — Routes organized by controller name so you can toggle in bulk
-- **One-Click Toggles** — Enable or disable individual routes or entire groups instantly via LiveView
+- **One-Click Toggles** — Enable or disable individual routes or entire groups instantly via LiveView (page reload fallback for apps without LiveView JS)
 - **Route Guard Plug** — Disabled routes return `403` at the Plug level, before they hit your controller
 - **Session-Based Login** — Secure login page with admin/viewer role-based access control
 - **Account Management** — Add/remove users, set roles (admin/viewer) directly from the dashboard
-- **Persistent State** — Route policies, accounts, and audit logs stored via CubDB (crash-safe, ACID)
+- **Persistent State** — Route policies, accounts, and audit logs stored via CubDB (crash-safe, ACID atomic toggles)
 - **Audit Log** — Every toggle, hide, and account change logged with who/what/when — expandable with pagination and CSV download
+- **Dead Render Fallback** — Full static HTML fallback for API-only apps without LiveView JS
 
 ---
 
@@ -46,7 +69,7 @@ let liveSocket = new LiveSocket("/live", Socket, { params: { _csrf_token: csrfTo
 liveSocket.connect()
 ```
 
-**Without LiveView JS** (`--no-assets` or API-only apps): the console loads and individual toggles work via page reload (query-param fallback), but interactive features like search, bulk select, audit log expand, and account management require a full LiveView connection.
+**Without LiveView JS** (`--no-assets` or API-only apps): the console operates in **dead-render mode** using standard HTML forms and links. Every feature works: toggles, search, audit log expand, account management, compare plans modal, reset all. Features that require JavaScript (bulk checkboxes/select) are hidden in dead mode.
 
 ### Install
 
