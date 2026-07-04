@@ -31,24 +31,23 @@ defmodule ApiManagementConsoleV2 do
 
   """
   def list_routes(router_module) when is_atom(router_module) do
-    Code.ensure_loaded!(router_module)
-
-    if function_exported?(router_module, :__routes__, 0) do
-      router_module.__routes__()
-      |> Enum.map(&route_to_map/1)
+    try do
+      Code.ensure_loaded!(router_module)
+    rescue
+      ArgumentError -> []
     else
-      []
+      _ ->
+        if function_exported?(router_module, :__routes__, 0) do
+          router_module.__routes__()
+          |> Enum.map(&route_to_map/1)
+        else
+          []
+        end
     end
   end
 
   @doc """
   Returns route paths as formatted strings: `"GET /api/users → MyApp.UserController.index"`
-
-  ## Example
-
-      iex> ApiManagementConsoleV2.list_routes_as_strings(MyAppWeb.Router)
-      ["GET / → PageController.index", ...]
-
   """
   def list_routes_as_strings(router_module) do
     router_module

@@ -29,7 +29,7 @@ defmodule ApiManagementConsoleV2.Router do
   """
   defmacro __using__(_opts) do
     quote do
-      :persistent_term.put({:api_management_console, :phoenix_router}, __MODULE__)
+      Application.put_env(:api_management_console, :phoenix_router, __MODULE__)
       ApiManagementConsoleV2.ConsolePaths.init()
       import ApiManagementConsoleV2.Router, only: [api_console: 1]
 
@@ -66,6 +66,7 @@ defmodule ApiManagementConsoleV2.Router do
         pipe_through [:api_console_auth]
         get "/logout", ApiManagementConsoleV2Web.Plugs.Logout, []
         get "/audit.csv", ApiManagementConsoleV2Web.Plugs.AuditDownload, []
+        post "/", ApiManagementConsoleV2Web.DeadConsoleController, :action
         live "/", ApiManagementConsoleV2Web.RouteConsoleLive, :index
       end
     end

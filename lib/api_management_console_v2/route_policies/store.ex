@@ -25,6 +25,7 @@ defmodule ApiManagementConsoleV2.RoutePolicies.Store do
 
     CubDB.transaction(@db_name, fn tx ->
       current = CubDB.Tx.get(tx, key)
+      current = if is_nil(current), do: true, else: current
       tx = CubDB.Tx.put(tx, key, enabled)
       {:commit, tx, current}
     end)
@@ -37,6 +38,7 @@ defmodule ApiManagementConsoleV2.RoutePolicies.Store do
       {tx, results} =
         Enum.reduce(keys, {tx, []}, fn key, {tx, acc} ->
           current = CubDB.Tx.get(tx, key)
+          current = if is_nil(current), do: true, else: current
           tx = CubDB.Tx.put(tx, key, enabled)
           {tx, [{key, current} | acc]}
         end)
@@ -50,6 +52,7 @@ defmodule ApiManagementConsoleV2.RoutePolicies.Store do
       {tx, results} =
         Enum.reduce(updates, {tx, []}, fn {key, enabled}, {tx, acc} ->
           current = CubDB.Tx.get(tx, key)
+          current = if is_nil(current), do: true, else: current
           tx = CubDB.Tx.put(tx, key, enabled)
           {tx, [{key, current} | acc]}
         end)

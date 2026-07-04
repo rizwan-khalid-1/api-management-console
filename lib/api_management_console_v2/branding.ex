@@ -28,4 +28,8 @@ defmodule ApiManagementConsoleV2.Branding do
       false
     end
   end
+
+  def page_title do
+    "#{app_name()} · API Console"
+  end
 end

@@ -1,6 +1,8 @@
 defmodule ApiManagementConsoleV2.Accounts.Store do
   @moduledoc false
 
+  alias ApiManagementConsoleV2.Accounts
+
   @db_name :api_accounts_db
 
   def get(username) do
@@ -34,7 +36,7 @@ defmodule ApiManagementConsoleV2.Accounts.Store do
     %{
       username: map["username"] || map[:username],
       password_hash: map["password_hash"] || map[:password_hash],
-      role: String.to_existing_atom(to_string(map["role"] || map[:role])),
+      role: Accounts.parse_role(map["role"] || map[:role]),
       created_at: map["created_at"] || map[:created_at]
     }
   end

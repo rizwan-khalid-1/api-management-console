@@ -15,6 +15,8 @@ defmodule ApiManagementConsoleV2Web.Plugs.RequireAdmin do
 
   import Plug.Conn
 
+  alias ApiManagementConsoleV2.Accounts
+
   @impl true
   def init(opts), do: opts
 
@@ -22,7 +24,7 @@ defmodule ApiManagementConsoleV2Web.Plugs.RequireAdmin do
   def call(conn, _opts) do
     case get_session(conn, :api_console_user) do
       %{"username" => username, "role" => role} ->
-        user = %{username: username, role: String.to_existing_atom(role)}
+        user = %{username: username, role: Accounts.parse_role(role)}
         assign(conn, :api_console_user, user)
 
       nil ->

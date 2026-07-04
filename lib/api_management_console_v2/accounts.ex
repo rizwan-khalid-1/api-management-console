@@ -25,6 +25,17 @@ defmodule ApiManagementConsoleV2.Accounts do
   alias ApiManagementConsoleV2.Accounts.Store
   alias ApiManagementConsoleV2.Features
 
+  @valid_roles [:admin, :viewer]
+
+  @doc "Returns the list of valid roles."
+  def valid_roles, do: @valid_roles
+
+  @doc "Parses a role string into an atom. Returns :viewer for unknown values."
+  def parse_role("admin"), do: :admin
+  def parse_role("viewer"), do: :viewer
+  def parse_role(role) when is_atom(role) and role in @valid_roles, do: role
+  def parse_role(_), do: :viewer
+
   @doc "Authenticate a user. Returns {:ok, role} or {:error, reason}."
   def authenticate(username, password) when is_binary(username) and is_binary(password) do
     case Store.get(username) do

@@ -46,7 +46,7 @@ let liveSocket = new LiveSocket("/live", Socket, { params: { _csrf_token: csrfTo
 liveSocket.connect()
 ```
 
-If your app was scaffolded without this (e.g. `--no-assets`), toggles fall back to page-reload mode via query parameters.
+**Without LiveView JS** (`--no-assets` or API-only apps): the console loads and individual toggles work via page reload (query-param fallback), but interactive features like search, bulk select, audit log expand, and account management require a full LiveView connection.
 
 ### Install
 
