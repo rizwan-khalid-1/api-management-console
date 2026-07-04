@@ -6,28 +6,6 @@ A Phoenix LiveView library that gives you real-time control over your backend ro
 
 ---
 
-## Screenshots
-
-### Main Dashboard (LiveView)
-![Main Dashboard](screenshots/main-dashboard-view.png)
-
-### Main Dashboard (Static / Dead Render)
-![Main Dashboard Static](screenshots/main-dashboard-view-static-app.png)
-
-### Routes with Bulk Selection
-![Routes Checked](screenshots/routes-checked.png)
-
-### Audit Log & Account Management
-![Audit Log & Accounts](screenshots/audit-log+accounts-section.png)
-
-### Compare Plans Modal
-![Compare Plans](screenshots/compare-plans-modal.png)
-
-### Login Screen
-![Login](screenshots/login-screen.png)
-
----
-
 ## What It Does
 
 - **Route Discovery** — Automatically pulls every route from your Phoenix router
@@ -295,6 +273,28 @@ License keys are issued by the library maintainer. Contact the author to obtain 
 | `joken` (~> 2.6) | JWT verification for offline license validation |
 | `phoenix` (optional) | Web framework integration |
 | `phoenix_live_view` (optional) | Real-time dashboard UI |
+
+---
+
+## Screenshots
+
+### Main Dashboard (LiveView)
+![Main Dashboard](screenshots/main-dashboard-view.png)
+
+### Main Dashboard (Static / Dead Render)
+![Main Dashboard Static](screenshots/main-dashboard-view-static-app.png)
+
+### Routes with Bulk Selection
+![Routes Checked](screenshots/routes-checked.png)
+
+### Audit Log & Account Management
+![Audit Log & Accounts](screenshots/audit-log+accounts-section.png)
+
+### Compare Plans Modal
+![Compare Plans](screenshots/compare-plans-modal.png)
+
+### Login Screen
+![Login](screenshots/login-screen.png)
 
 ---
 
