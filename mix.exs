@@ -9,7 +9,13 @@ defmodule ApiManagementConsoleV2.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       description: "A Phoenix LiveView library for real-time API route management — discover, toggle, audit, and guard your routes from a dashboard",
-      package: package()
+      source_url: "https://github.com/rizwan-khalid-1/api-management-console",
+      homepage_url: "https://github.com/rizwan-khalid-1/api-management-console",
+      package: package(),
+      docs: [
+        main: "readme",
+        extras: ["README.md", "ROADMAP.md"]
+      ]
     ]
   end
 
@@ -26,15 +32,16 @@ defmodule ApiManagementConsoleV2.MixProject do
       {:phoenix_live_view, "~> 0.20 or ~> 1.0", optional: true},
       {:cubdb, "~> 2.0"},
       {:bcrypt_elixir, "~> 2.0 or ~> 3.0"},
-      {:joken, "~> 2.6"}
+      {:joken, "~> 2.6"},
+      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
     ]
   end
 
   defp package do
     [
       licenses: ["MIT"],
-      links: %{"GitHub" => "https://github.com/rizwankhalid/api_management_console"},
-      files: ~w(lib mix.exs README.md LICENSE priv)
+      links: %{"GitHub" => "https://github.com/rizwan-khalid-1/api-management-console"},
+      files: ~w(lib mix.exs README.md LICENSE priv .formatter.exs)
     ]
   end
 end
