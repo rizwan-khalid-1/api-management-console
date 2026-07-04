@@ -186,23 +186,24 @@ $ mix phx.server
 | Feature | Description |
 |---|---|
 | Route Discovery | Auto-discovers all routes from your Phoenix router |
-| One-Click Toggles | Enable/disable individual routes or entire groups — instant via LiveView |
+| One-Click Toggles | Enable/disable individual routes or entire groups — instant via LiveView, page reload in dead mode |
+| Dead Render Fallback | Full static HTML fallback for apps without LiveView JS |
 | Route Guard | Blocks disabled routes with `403` at the Plug level |
 | Session Login | Secure login page with session-based authentication |
 | RBAC | Admin and Viewer roles — admins toggle, viewers read-only |
 | Account Management | Add/remove users, change roles, up to 5 users |
-| CubDB Storage | Embedded key-value store — crash-safe, zero config, ACID atomic toggles |
+| CubDB Storage | Embedded key-value store — crash-safe, ACID atomic toggles |
 | Grouped Routes | Routes organized by controller name, toggleable to flat view |
-| Search & Filter | Instant search by path, method, or controller name |
+| Search & Filter | Search by path, method, or controller name |
 | Health Bar | Visual progress bar showing enabled vs disabled ratio |
 | Protected Routes | Immutable routes (greyed out, untoggleable) via config |
 | Dark Mode | Auto-detects `prefers-color-scheme` |
-| Bulk Operations | Checkboxes, select all/clear per group, bulk enable/disable/hide |
+| Bulk Operations | Checkboxes, select all/clear per group, bulk enable/disable/hide *(LiveView only)* |
 | Hide Routes | Hide routes from console view, restore from modal |
 | Audit Log | Every action logged with username, expandable with pagination, CSV download |
 | 30-Day Audit History | Free tier retains 30 days of audit entries |
 | Reset All | One-click re-enable all routes with confirmation dialog |
-| 50-Route Limit | Free tier manages up to 50 routes — extras shown as faded teaser |
+| 50-Route Limit | Free tier manages up to 50 routes — extras shown as faded teaser with upgrade CTA |
 | Compare Plans Modal | Side-by-side Free vs PRO feature matrix with active plan highlighted |
 
 ### Paid (PRO) Tier
@@ -210,9 +211,9 @@ $ mix phx.server
 | Feature | Description |
 |---|---|
 | Company Branding | Custom app name, hide "Powered by" footer ✅ |
-| Unlimited Routes | No 50-route cap |
-| Unlimited Users | No 5-user cap on RBAC |
-| Full Audit History | No 30-day retention limit |
+| Unlimited Routes | No 50-route cap ✅ |
+| Unlimited Users | No 5-user cap on RBAC ✅ |
+| Full Audit History | No 30-day retention limit ✅ |
 | Scheduled Toggles | Schedule enable/disable at specific times *(coming soon)* |
 | PostgreSQL Storage | Multi-node consistency via Ecto *(coming soon)* |
 | Slack Notifications | Webhook alerts on policy changes *(coming soon)* |
