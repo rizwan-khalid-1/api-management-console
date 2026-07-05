@@ -52,12 +52,15 @@ liveSocket.connect()
 ### Install
 
 ```elixir
-# Add the dependency (Git for now — Hex package coming soon)
+# Add from Hex (recommended)
 def deps do
   [
-    {:api_management_console, github: "rizwankhalid/api_management_console"}
+    {:api_management_console, "~> 0.1.0"}
   ]
 end
+
+# Or from GitHub
+# {:api_management_console, github: "rizwan-khalid-1/api-management-console"}
 
 # Install
 $ mix deps.get
@@ -280,22 +283,22 @@ License keys are issued by the library maintainer. Contact the author to obtain 
 ## Screenshots
 
 ### Main Dashboard (LiveView)
-![Main Dashboard](screenshots/main-dashboard-view.png)
+![Main Dashboard](https://raw.githubusercontent.com/rizwan-khalid-1/api-management-console/main/screenshots/main-dashboard-view.png)
 
 ### Main Dashboard (Static / Dead Render)
-![Main Dashboard Static](screenshots/main-dashboard-view-static-app.png)
+![Main Dashboard Static](https://raw.githubusercontent.com/rizwan-khalid-1/api-management-console/main/screenshots/main-dashboard-view-static-app.png)
 
 ### Routes with Bulk Selection
-![Routes Checked](screenshots/routes-checked.png)
+![Routes Checked](https://raw.githubusercontent.com/rizwan-khalid-1/api-management-console/main/screenshots/routes-checked.png)
 
 ### Audit Log & Account Management
-![Audit Log & Accounts](screenshots/audit-log+accounts-section.png)
+![Audit Log & Accounts](https://raw.githubusercontent.com/rizwan-khalid-1/api-management-console/main/screenshots/audit-log+accounts-section.png)
 
 ### Compare Plans Modal
-![Compare Plans](screenshots/compare-plans-modal.png)
+![Compare Plans](https://raw.githubusercontent.com/rizwan-khalid-1/api-management-console/main/screenshots/compare-plans-modal.png)
 
 ### Login Screen
-![Login](screenshots/login-screen.png)
+![Login](https://raw.githubusercontent.com/rizwan-khalid-1/api-management-console/main/screenshots/login-screen.png)
 
 ---
 
@@ -313,7 +316,7 @@ MIT License — use, modify, distribute freely. Paid features are unlocked via a
 
 ## Community
 
-- [GitHub Issues](https://github.com/rizwankhalid/api_management_console) — Bug reports & feature requests
+- [GitHub Issues](https://github.com/rizwan-khalid-1/api-management-console/issues) — Bug reports & feature requests
 
 ---
 
