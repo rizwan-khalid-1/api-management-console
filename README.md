@@ -28,7 +28,6 @@ A Phoenix LiveView library that gives you real-time control over your backend ro
 | Peak traffic load shedding | SSH, edit configs, restart services | Dashboard on second monitor, instant |
 | Security vulnerability exposure | 45 min (CI/CD + deploy) | Disable endpoint immediately |
 | Maintenance window | Wake up at 2am or write custom scripts | Toggle it and sleep |
-| Compliance (GDPR data freeze) | Days of discovery and code changes | One click to disable all tagged routes |
 
 ---
 
