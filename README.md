@@ -307,6 +307,9 @@ License keys are issued by the library maintainer. Contact the author to obtain 
 ### Compare Plans Modal
 ![Compare Plans](https://raw.githubusercontent.com/rizwan-khalid-1/api-management-console/main/screenshots/compare-plans-modal.png)
 
+### Manage Route Selection Modal
+![Manage Route Selection](https://raw.githubusercontent.com/rizwan-khalid-1/api-management-console/main/screenshots/manage-route-selection-modal.png)
+
 ### Login Screen
 ![Login](https://raw.githubusercontent.com/rizwan-khalid-1/api-management-console/main/screenshots/login-screen.png)
 
