@@ -245,6 +245,8 @@ When your app has more than 50 managed routes on the free tier:
 
 The "Compare Plans" modal (button next to the tier badge) shows exactly what each tier includes, with the active plan highlighted in green.
 
+**Route Selection (Free Tier):** Admins can pick which 50 routes to manage from the "Manage Selection" modal. Selected routes are fully interactive; unselected routes show as read-only immutable. The selection persists across refreshes and resets. On PRO tier, all routes are managed automatically.
+
 ---
 
 ## Storage
@@ -310,7 +312,8 @@ License keys are issued by the library maintainer. Contact the author to obtain 
 ### Compare Plans Modal
 ![Compare Plans](https://raw.githubusercontent.com/rizwan-khalid-1/api-management-console/main/screenshots/compare-plans-modal.png)
 
-### Manage Route Selection Modal
+### Manage Route Selection Modal (Free Tier)
+Admins on the free tier pick which 50 routes to manage. Unselected routes show as read-only with an upgrade prompt. PRO tier admins see a greyed-out ∞ indicator — all routes are managed.
 ![Manage Route Selection](https://raw.githubusercontent.com/rizwan-khalid-1/api-management-console/main/screenshots/manage-route-selection-modal.png)
 
 ---
