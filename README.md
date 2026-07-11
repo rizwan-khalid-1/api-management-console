@@ -1,8 +1,8 @@
-# API Management Console
+# API Management Console [![Hex Version](https://img.shields.io/hexpm/v/api_management_console.svg)](https://hex.pm/packages/api_management_console) [![Hex Docs](https://img.shields.io/badge/docs-hexpm-blue.svg)](https://hexdocs.pm/api_management_console)
 
 > **Turn 30 minutes of API disable/enable work into 5 seconds. One click. Instant effect. Full audit trail.**
 
-A Phoenix LiveView library that gives you real-time control over your backend routes. Discover every endpoint in your Phoenix app, then enable or disable them from a protected dashboard — no redeployment needed.
+A Phoenix library that gives you real-time control over your backend routes. Discover every endpoint in your Phoenix app, then enable or disable them from a protected dashboard — no redeployment needed.
 
 ---
 
@@ -50,19 +50,20 @@ liveSocket.connect()
 
 ### Install
 
+The package can be installed by adding `api_management_console` to your list of dependencies in `mix.exs`:
+
 ```elixir
-# Add from Hex (recommended)
 def deps do
   [
     {:api_management_console, "~> 0.1.0"}
   ]
 end
+```
 
-# Or from GitHub
-# {:api_management_console, github: "rizwan-khalid-1/api-management-console"}
+Or from GitHub:
 
-# Install
-$ mix deps.get
+```elixir
+{:api_management_console, github: "rizwan-khalid-1/api-management-console"}
 ```
 
 ### Mount the console in your router
@@ -204,21 +205,19 @@ $ mix phx.server
 | Hide Routes | Hide routes from console view, restore from modal |
 | Audit Log | Every action logged with username, expandable with pagination, CSV download |
 | 30-Day Audit History | Free tier retains 30 days of audit entries |
-| Reset All | One-click re-enable all routes with confirmation dialog |
 | 50-Route Limit | Free tier manages up to 50 routes — extras shown as faded teaser with upgrade CTA |
-| Compare Plans Modal | Side-by-side Free vs PRO feature matrix with active plan highlighted |
 
 ### Paid (PRO) Tier
 
-| Feature | Description |
-|---|---|
-| Company Branding | Custom app name, hide "Powered by" footer ✅ |
-| Unlimited Routes | No 50-route cap ✅ |
-| Unlimited Users | No 5-user cap on RBAC ✅ |
-| Full Audit History | No 30-day retention limit ✅ |
-| Scheduled Toggles | Schedule enable/disable at specific times *(coming soon)* |
-| PostgreSQL Storage | Multi-node consistency via Ecto *(coming soon)* |
-| Slack Notifications | Webhook alerts on policy changes *(coming soon)* |
+| Feature | Description | Status |
+|---|---|---|
+| Company Branding | Custom app name, hide "Powered by" footer | ✅ Done |
+| Unlimited Routes | No 50-route cap | ✅ Done |
+| Unlimited Users | No 5-user cap on RBAC | ✅ Done |
+| Full Audit History | No 30-day retention limit | ✅ Done |
+| Scheduled Toggles | Schedule enable/disable at specific times | 🔜 Planned |
+| PostgreSQL Storage | Multi-node consistency via Ecto | 🔜 Planned |
+| Slack Notifications | Webhook alerts on policy changes | 🔜 Planned |
 
 ---
 
@@ -303,7 +302,7 @@ License keys are issued by the library maintainer. Contact the author to obtain 
 
 ## Roadmap
 
-See [ROADMAP.md](./ROADMAP.md) for completed features, planned work, and known issues.
+See [ROADMAP.md](https://github.com/rizwan-khalid-1/api-management-console/blob/main/ROADMAP.md) for completed features, planned work, and known issues.
 
 ---
 

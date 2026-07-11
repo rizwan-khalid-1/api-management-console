@@ -52,27 +52,40 @@ Public roadmap for the API Management Console library. See what's done, what's n
 - Configurable storage path, debug logging, protected routes
 - Customizable login template (`priv/templates/login.html.eex`)
 
----
+### Dead Render (Non-LiveView) Mode
+- Full static HTML fallback for apps without LiveView JS
+- Every feature works: toggles, search, audit log, account management, compare plans, reset
+- Bulk checkboxes/select hidden in dead mode (requires JavaScript)
 
-## 🐛 Known Issues
-
-- **Toggle buttons don't work on static sites** — `<button phx-click>` requires LiveView WebSocket. Consumers without LiveView JS (`--no-assets` apps) get dead render with non-functional toggles. Fallback via query params (page reload) works but isn't fully implemented for all actions.
 ### Storage
 - CubDB transactions for all toggle mutations (atomic read+write, no lost state on concurrent toggles)
 
 ---
 
+## 🐛 Known Issues
+
+- **Bulk operations require LiveView** — checkboxes and bulk bar only work with LiveView JS. Dead render mode hides these features.
+- **LiveView JS required for instant toggles** — without it, toggles reload the page (still functional, just not instant).
+
+---
+
 ## 📅 Planned
 
-### Paid Features — Implement & Gate
-Build the remaining paid-only features (currently commented out in `features.ex`):
+### Paid Features (Not Yet Implemented)
 
-- **`scheduled_toggles`** — schedule enable/disable at specific times (needs Oban integration, schedule UI, cron storage)
-- **`postgresql_storage`** — PostgreSQL backend option via Ecto (needs schema, migration, Store adapter swap)
-- **`slack_notifications`** — webhook alerts on policy changes (needs webhook config, HTTP client, templates)
+Features registered as `:paid` in `features.ex` but not yet built:
+
+| Feature | Description | Status |
+|---|---|---|
+| Scheduled Toggles | Schedule enable/disable at specific times (needs Oban, schedule UI, cron storage) | 🔜 Planned |
+| PostgreSQL Storage | Multi-node Ecto backend (needs schema, migration, Store adapter swap) | 🔜 Planned |
+| Slack Notifications | Webhook alerts on policy changes (needs webhook config, HTTP client, templates) | 🔜 Planned |
 
 ### Configurable Route Selection (Free Tier)
-Let users manually pick which routes count toward their 50-route free tier cap. Store the selection in CubDB so it survives refreshes and new route additions.
+
+Let users manually pick which routes count toward their 50-route free tier cap. The selection persists in CubDB so the list of managed routes survives refreshes and new route additions.
+
+> 🔜 Planned
 
 ---
 
