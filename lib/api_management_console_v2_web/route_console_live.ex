@@ -62,6 +62,11 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
       |> assign(:show_user_limit_popup, false)
       |> assign(:teaser_routes, [])
       |> assign(:routes_over_cap, 0)
+      |> assign(:show_selection_modal, false)
+      |> assign(:selection_modal_routes, [])
+      |> assign(:temp_selection, MapSet.new())
+      |> assign(:selection_count, 0)
+      |> assign(:show_cap_warning, false)
 
     {:ok, load_dashboard(socket)}
   end
@@ -272,6 +277,61 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
     {:noreply, assign(socket, show_user_limit_popup: false)}
   end
 
+  defp do_handle_event("show_selection_modal", _params, socket) do
+    current_selection = RoutePolicies.get_selection()
+
+    {:noreply,
+     assign(socket,
+       show_selection_modal: true,
+       selection_modal_routes: socket.assigns.all_routes_flat,
+       temp_selection: current_selection,
+       show_cap_warning: false
+     )}
+  end
+
+  defp do_handle_event("close_selection_modal", _params, socket) do
+    {:noreply, assign(socket, show_selection_modal: false)}
+  end
+
+  defp do_handle_event("toggle_selection_route", %{"key" => key}, socket) do
+    sel = socket.assigns.temp_selection
+
+    if MapSet.member?(sel, key) do
+      {:noreply, assign(socket, temp_selection: MapSet.delete(sel, key))}
+    else
+      if MapSet.size(sel) < Features.max_routes() do
+        RoutePolicies.set_route_enabled(key, true)
+        {:noreply, assign(socket, temp_selection: MapSet.put(sel, key))}
+      else
+        {:noreply, assign(socket, show_cap_warning: true)}
+      end
+    end
+  end
+
+  defp do_handle_event("dismiss_cap_warning", _params, socket) do
+    {:noreply, assign(socket, show_cap_warning: false)}
+  end
+
+  defp do_handle_event("select_all_routes", _params, socket) do
+    routes = socket.assigns.selection_modal_routes
+    cap = Features.max_routes()
+
+    all_keys = Enum.map(routes, & &1.key)
+    selected = Enum.take(all_keys, cap) |> MapSet.new()
+
+    {:noreply, assign(socket, temp_selection: selected)}
+  end
+
+  defp do_handle_event("deselect_all_routes", _params, socket) do
+    {:noreply, assign(socket, temp_selection: MapSet.new())}
+  end
+
+  defp do_handle_event("save_selection", _params, socket) do
+    RoutePolicies.set_selection(socket.assigns.temp_selection)
+    AuditLog.append(username(socket), "update_selection", "*", nil, nil)
+    {:noreply, load_dashboard(socket) |> assign(show_selection_modal: false, selection_count: MapSet.size(socket.assigns.temp_selection))}
+  end
+
   defp do_handle_event("toggle_accounts", _params, socket) do
     if socket.assigns.show_accounts do
       {:noreply, assign(socket, show_accounts: false)}
@@ -427,6 +487,52 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
     assign(socket, :show_upgrade_notice, false)
   end
 
+  defp handle_dead_param("selection", "true", socket) do
+    assign(socket,
+      show_selection_modal: true,
+      selection_modal_routes: socket.assigns.all_routes_flat,
+      temp_selection: RoutePolicies.get_selection()
+    )
+  end
+
+  defp handle_dead_param("save_selection", keys_csv, socket) do
+    keys = String.split(keys_csv, ",", trim: true)
+    cap = Features.max_routes()
+    capped = if length(keys) > cap, do: Enum.take(keys, cap), else: keys
+    RoutePolicies.set_selection(capped)
+    AuditLog.append(username(socket), "update_selection", "*", nil, nil)
+    assign(socket, show_selection_modal: false)
+  end
+
+  defp handle_dead_param("commit_toggle", _key, socket) do
+    # toggle was already computed in the href — just load fresh state
+    socket
+  end
+
+  defp handle_dead_param("commit_val", keys_csv, socket) do
+    keys = String.split(keys_csv, ",", trim: true)
+    cap = Features.max_routes()
+    capped = if length(keys) > cap, do: Enum.take(keys, cap), else: keys
+    RoutePolicies.set_selection(capped)
+    # Re-sync temp_selection with what was just committed
+    assign(socket, temp_selection: MapSet.new(capped))
+  end
+
+  defp handle_dead_param("commit_select_all", "true", socket) do
+    routes = socket.assigns.selection_modal_routes
+    cap = Features.max_routes()
+    keys = Enum.map(routes, & &1.key) |> Enum.take(cap)
+    RoutePolicies.set_selection(keys)
+    AuditLog.append(username(socket), "update_selection", "*", nil, nil)
+    assign(socket, temp_selection: MapSet.new(keys))
+  end
+
+  defp handle_dead_param("commit_clear_all", "true", socket) do
+    RoutePolicies.set_selection([])
+    AuditLog.append(username(socket), "update_selection", "*", nil, nil)
+    assign(socket, temp_selection: MapSet.new())
+  end
+
   defp handle_dead_param("add_account", "true", socket) do
     # POST form — handled by do_handle_event via the form params
     # At this point params have username/password/role from the form
@@ -481,6 +587,7 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
           .console-audit-toggle:hover { background: #334155 !important; }
           .console-bulk-bar { background: #1e3a5f !important; border-color: #3b82f6 !important; }
           .console-audit-row { border-color: #334155 !important; }
+          .console-route-path { color: #e2e8f0 !important; }
         }
         .console-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 24px; padding: 1.5rem; margin-bottom: 1.5rem; }
         .console-header-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 1rem; }
@@ -506,7 +613,8 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
         .console-route-left { min-width: 0; flex: 1; }
         .console-route-meta { display: flex; align-items: center; gap: 0.5rem; }
         .console-method-badge { background: #e5e7eb; padding: 2px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; }
-        .console-route-path { font-size: 0.875rem; font-weight: 500; margin: 0.25rem 0 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .console-route-path { font-size: 0.875rem; font-weight: 500; margin: 0.25rem 0 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #374151; }
+        .console-stat-label { color: #6b7280; }
         .console-toggle { position: relative; width: 64px; height: 32px; border-radius: 16px; border: 1px solid; cursor: pointer; transition: all 0.3s; flex-shrink: 0; text-decoration: none; display: inline-block; padding: 0; }
         .console-toggle-on { background: #166534; border-color: #15803d; }
         .console-toggle-off { background: #991b1b; border-color: #b91c1c; }
@@ -564,6 +672,16 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
         .console-teaser-lock-text { font-size: 0.8rem; font-weight: 600; color: #6b7280; }
         .console-teaser-lock-btn { background: linear-gradient(135deg, #3b82f6, #8b5cf6); color: #fff; border: none; padding: 0.4rem 1.25rem; border-radius: 8px; font-size: 0.78rem; font-weight: 700; cursor: pointer; box-shadow: 0 2px 12px rgba(59,130,246,0.3); }
         .console-teaser-lock-btn:hover { opacity: 0.9; }
+        .console-login-info { font-size: 0.78rem; color: #374151; }
+        .console-login-username { color: #1e40af; font-weight: 700; }
+        .console-login-role-admin { color: #166534; font-weight: 700; }
+        .console-login-role-viewer { color: #374151; font-weight: 700; }
+        @media (prefers-color-scheme: dark) {
+          .console-login-info { color: rgb(226,232,240); }
+          .console-login-username { color: #93c5fd; }
+          .console-login-role-admin { color: #86efac; }
+          .console-login-role-viewer { color: rgb(226,232,240); }
+        }
       </style>
 
       <div class="console-card">
@@ -586,14 +704,25 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
             </h1>
             <p class="console-subtitle">Control route availability in real time.</p>
             <div style="margin-top:0.5rem;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
-              <span style="font-size:0.75rem;color:#6b7280;">
-                Logged in as <strong><%= @current_user.username %></strong>
-                (<%= if @current_user.role == :admin, do: "Admin", else: "Viewer" %>)
+              <span class="console-login-info">
+                Logged in as <strong class="console-login-username"><%= @current_user.username %></strong>
+                (<%= if @current_user.role == :admin do %><strong class="console-login-role-admin">Admin</strong><% else %><strong class="console-login-role-viewer">Viewer</strong><% end %>)
               </span>
-              <a href={"#{@console_path}/logout"} style="font-size:0.75rem;color:#3b82f6;text-decoration:none;">Logout</a>
+              <a href={"#{@console_path}/logout"} style="font-size:0.65rem;font-weight:600;color:#b45309;background:#fef3c7;padding:2px 8px;border-radius:6px;text-decoration:none;">Logout</a>
               <span style={"font-size:0.65rem;font-weight:600;padding:2px 8px;border-radius:4px;" <> tier_badge_style(License.get_tier())}>
                 <%= tier_label(License.get_tier()) %>
               </span>
+              <%= if @current_user.role == :admin do %>
+                <%= if Features.max_routes() != :unlimited do %>
+                  <%= if @connected do %>
+                    <button phx-click="show_selection_modal" style="font-size:0.7rem;color:#fff;background:linear-gradient(135deg,#8b5cf6,#6366f1);border:none;border-radius:6px;padding:2px 10px;cursor:pointer;font-weight:600;">Manage Selection (<%= @selection_count %>/<%= Features.max_routes() %>)</button>
+                  <% else %>
+                    <a href="?selection=true" style="font-size:0.7rem;color:#fff;background:linear-gradient(135deg,#8b5cf6,#6366f1);border:none;border-radius:6px;padding:2px 10px;font-weight:600;text-decoration:none;">Manage Selection (<%= @selection_count %>/<%= Features.max_routes() %>)</a>
+                  <% end %>
+                <% else %>
+                  <span title="You are on PRO tier — all routes are managed" style="font-size:0.7rem;color:#9ca3af;background:#e5e7eb;border:1px solid #d1d5db;border-radius:6px;padding:2px 8px;cursor:not-allowed;opacity:0.6;">Manage Selection (∞)</span>
+                <% end %>
+              <% end %>
               <%= if @connected do %>
                 <button phx-click="show_plans_modal" style="font-size:0.7rem;color:#3b82f6;background:none;border:1px solid #3b82f6;border-radius:6px;padding:2px 8px;cursor:pointer;">Compare Plans</button>
               <% else %>
@@ -616,9 +745,10 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
         </div>
 
         <%= if @stats.total > 0 do %>
+          <% mutable_total = @stats.enabled + @stats.disabled %>
           <div class="console-progress">
             <div class="console-progress-bg">
-              <div class="console-progress-fill" style={"width:#{@stats.enabled / @stats.total * 100}%"} />
+              <div class="console-progress-fill" style={"width:#{if mutable_total > 0, do: @stats.enabled / mutable_total * 100, else: 100}%"} />
             </div>
           </div>
         <% end %>
@@ -868,6 +998,89 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
       <p class="console-powered-by"><%= if not Branding.hide_powered_by?, do: "Powered by API Management Console" %></p>
     </div>
 
+    <%= if @show_selection_modal do %>
+      <div class="console-modal-overlay">
+        <div class="console-modal" style="min-width:650px;max-width:900px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+            <h3 style="margin:0;">Manage Route Selection</h3>
+            <%= if @connected do %>
+              <button phx-click="close_selection_modal" style="border:none;background:none;cursor:pointer;font-size:1.2rem;color:inherit;">✕</button>
+            <% else %>
+              <a href="?" style="text-decoration:none;font-size:1.2rem;color:inherit;">✕</a>
+            <% end %>
+          </div>
+          <p style="font-size:0.8rem;color:#6b7280;margin-bottom:0.75rem;">
+            Select up to <strong><%= Features.max_routes() %></strong> routes to manage. Unselected routes are read-only.
+            <strong style="color:#8b5cf6;"><%= MapSet.size(@temp_selection) %>/<%= Features.max_routes() %> selected</strong>
+          </p>
+          <div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;">
+            <%= if @connected do %>
+              <button phx-click="select_all_routes" class="console-group-btn" style="font-size:0.7rem;">Select First <%= Features.max_routes() %></button>
+              <button phx-click="deselect_all_routes" class="console-group-btn" style="font-size:0.7rem;">Clear All</button>
+            <% else %>
+              <a href="?selection=true&commit_select_all=true" class="console-group-btn" style="font-size:0.7rem;text-decoration:none;">Select First <%= Features.max_routes() %></a>
+              <a href="?selection=true&commit_clear_all=true" class="console-group-btn" style="font-size:0.7rem;text-decoration:none;">Clear All</a>
+            <% end %>
+          </div>
+          <%= if @show_cap_warning do %>
+            <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:0.5rem 1rem;margin-bottom:0.75rem;display:flex;justify-content:space-between;align-items:center;">
+              <span style="font-size:0.8rem;color:#92400e;">⚠ Free tier limited to <strong><%= Features.max_routes() %></strong> routes. <strong>Upgrade to PRO for unlimited routes.</strong></span>
+              <button phx-click="dismiss_cap_warning" style="border:none;background:none;cursor:pointer;font-size:1rem;color:#92400e;">✕</button>
+            </div>
+          <% end %>
+          <div style="max-height:55vh;overflow-y:auto;">
+            <%= for route <- @selection_modal_routes do %>
+              <% selected = MapSet.member?(@temp_selection, route.key) %>
+              <%= if @connected do %>
+                <div class={"console-route-row " <> cond do
+                  selected -> "console-route-enabled"
+                  true -> "console-route-disabled"
+                end} style="cursor:pointer;" phx-click="toggle_selection_route" phx-value-key={route.key}>
+                  <div class="console-route-left">
+                    <div class="console-route-meta">
+                      <span class="console-method-badge"><%= route.method %></span>
+                      <span class="console-stat-label"><%= route.controller %>.<%= route.action %></span>
+                    </div>
+                    <p class="console-route-path"><%= route.path %></p>
+                  </div>
+                  <span style={"font-size:1.2rem;" <> if(selected, do: "color:#16a34a;", else: "color:#d1d5db;")}>
+                    <%= if selected, do: "✓", else: "○" %>
+                  </span>
+                </div>
+              <% else %>
+                <% new_sel = if selected, do: MapSet.delete(@temp_selection, route.key), else: MapSet.put(@temp_selection, route.key) %>
+                <a href={"?selection=true&commit_toggle=#{route.key}&commit_val=#{URI.encode_www_form(MapSet.to_list(new_sel) |> Enum.join(","))}"} style="text-decoration:none;display:block;">
+                  <div class={"console-route-row " <> cond do
+                    selected -> "console-route-enabled"
+                    true -> "console-route-disabled"
+                  end}>
+                    <div class="console-route-left">
+                      <div class="console-route-meta">
+                        <span class="console-method-badge"><%= route.method %></span>
+                        <span class="console-stat-label"><%= route.controller %>.<%= route.action %></span>
+                      </div>
+                      <p class="console-route-path"><%= route.path %></p>
+                    </div>
+                    <span style={"font-size:1.2rem;" <> if(selected, do: "color:#16a34a;", else: "color:#d1d5db;")}>
+                      <%= if selected, do: "✓", else: "○" %>
+                    </span>
+                  </div>
+                </a>
+              <% end %>
+            <% end %>
+          </div>
+          <div style="display:flex;gap:0.5rem;margin-top:1rem;justify-content:flex-end;">
+            <%= if @connected do %>
+              <button phx-click="close_selection_modal" class="console-group-btn">Cancel</button>
+              <button phx-click="save_selection" class="console-bulk-btn console-bulk-enable">Save Selection</button>
+            <% else %>
+              <a href="?" class="console-group-btn" style="text-decoration:none;">Close</a>
+            <% end %>
+          </div>
+        </div>
+      </div>
+    <% end %>
+
     <%= if @show_confirm_reset do %>
       <div class="console-modal-overlay">
         <div class="console-modal">
@@ -1011,6 +1224,8 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
   defp load_dashboard(socket) do
     router = socket.router
 
+    seed_default_selection(router)
+
     grouped_routes =
       try do
         RoutePolicies.list_grouped_routes(router)
@@ -1020,8 +1235,44 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
 
     socket
     |> assign(:grouped_routes, grouped_routes)
+    |> assign(:all_routes_flat, all_routes_flat(grouped_routes))
     |> assign(:stats, compute_stats(grouped_routes))
+    |> assign(:selection_count, RoutePolicies.selection_count())
     |> apply_search()
+  end
+
+  defp all_routes_flat(grouped_routes) do
+    grouped_routes
+    |> Map.values()
+    |> List.flatten()
+    |> Enum.reject(&RoutePolicies.console_route?(&1.path))
+    |> Enum.sort_by(&{&1.group, &1.path, &1.method})
+  end
+
+  defp seed_default_selection(router) do
+    if Features.max_routes() != :unlimited and RoutePolicies.selection_count() == 0 do
+      keys =
+        router.__routes__()
+        |> Enum.reject(&(is_nil(&1.verb) or not is_binary(&1.path)))
+        |> Enum.reject(&RoutePolicies.console_route?(&1.path))
+        |> Enum.reject(fn r ->
+          protected = Application.get_env(:api_management_console, :protected_routes, [])
+          Enum.any?(protected, fn p ->
+            cond do
+              is_binary(p) -> String.starts_with?(r.path, p) or String.ends_with?(r.path, p)
+              is_struct(p, Regex) -> Regex.match?(p, r.path) or Regex.match?(p, inspect(r.plug))
+              true -> false
+            end
+          end)
+        end)
+        |> Enum.sort_by(& &1.path)
+        |> Enum.map(fn r -> "#{String.downcase(to_string(r.verb))}|#{r.path}" end)
+        |> Enum.take(Features.max_routes())
+
+      RoutePolicies.set_selection(keys)
+    end
+
+    :ok
   end
 
   defp apply_search(socket) do
@@ -1084,41 +1335,40 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
     case Features.max_routes() do
       :unlimited -> {groups, [], 0}
       cap ->
-        # Flatten all mutable routes (preserving order within groups)
+        # All non-console routes
         all_routes =
           ordered_groups
           |> Enum.flat_map(fn {_group, routes} -> routes end)
-          |> Enum.filter(& &1.mutable)
+          |> Enum.reject(&RoutePolicies.console_route?(&1.path))
+
+        # Selected routes — always visible
+        selected_routes = Enum.filter(all_routes, & &1.mutable)
+        unselected_routes = Enum.reject(all_routes, & &1.mutable)
 
         total = length(all_routes)
+        selected_count = length(selected_routes)
 
         if total <= cap do
           {groups, [], 0}
         else
-          # Routes 1..cap-3 → visible in groups
-          # Routes cap-2..cap → teaser (blurred)
-          # Routes cap+1..end → hidden entirely
-          visible_count = max(cap - 3, 0)
-          teaser_count = min(3, cap - visible_count)
+          # Show all selected routes, plus up to 3 unselected routes as teaser
+          teaser_count = min(3, length(unselected_routes))
+          teaser_routes = Enum.take(unselected_routes, teaser_count)
 
-          visible_keys =
-            all_routes
-            |> Enum.take(visible_count)
+          # Hide remaining unselected routes
+          hidden_unselected_keys =
+            unselected_routes
+            |> Enum.drop(teaser_count)
             |> Enum.map(& &1.key)
             |> MapSet.new()
 
-          teaser_routes =
-            all_routes
-            |> Enum.drop(visible_count)
-            |> Enum.take(teaser_count)
-
-          over_cap = total - cap
+          over_cap = max(length(all_routes) - selected_count - teaser_count, 0)
 
           capped_groups =
             Map.new(groups, fn {group, routes} ->
               filtered =
-                Enum.filter(routes, fn r ->
-                  not r.mutable or MapSet.member?(visible_keys, r.key)
+                Enum.reject(routes, fn r ->
+                  MapSet.member?(hidden_unselected_keys, r.key)
                 end)
 
               {group, filtered}
@@ -1140,11 +1390,20 @@ defmodule ApiManagementConsoleV2Web.RouteConsoleLive do
       |> List.flatten()
       |> Enum.filter(& &1.mutable)
 
-    total = Enum.count(mutable)
+    # Total display = all non-console routes
+    all_non_console =
+      grouped_routes
+      |> Map.values()
+      |> List.flatten()
+      |> Enum.reject(&RoutePolicies.console_route?(&1.path))
+
+    total = Enum.count(all_non_console)
+    mutable_total = Enum.count(mutable)
     enabled = Enum.count(mutable, & &1.enabled)
-    disabled = total - enabled
+    disabled = mutable_total - enabled
     hidden = HiddenRoutes.count()
-    ratio = if total > 0, do: disabled / total, else: 0.0
+    # Health bar uses selected/mutable routes for ratio
+    ratio = if mutable_total > 0, do: disabled / mutable_total, else: 0.0
 
     %{total: total, enabled: enabled, disabled: disabled, hidden: hidden, disabled_ratio: ratio}
   end

@@ -47,6 +47,13 @@ Public roadmap for the API Management Console library. See what's done, what's n
 - Fade-to-lock route limit teaser (last 3 routes blurred with lock overlay + upgrade CTA)
 - Compare Plans modal with active plan highlighted
 
+### Configurable Route Selection (Free Tier)
+- Admin picks up to 50 routes to manage from the "Manage Selection" modal
+- Selected routes are interactive; unselected routes show as immutable + upgrade teaser
+- Selection persists in CubDB, survives refreshes and resets
+- Auto-seeds first 50 routes on first use (backward compatible)
+- PRO tier: all routes managed, modal shows greyed-out ∞ indicator
+
 ### Config
 - Single config key (`config :api_management_console, ...`)
 - Configurable storage path, debug logging, protected routes
@@ -80,12 +87,6 @@ Features registered as `:paid` in `features.ex` but not yet built:
 | Scheduled Toggles | Schedule enable/disable at specific times (needs Oban, schedule UI, cron storage) | 🔜 Planned |
 | PostgreSQL Storage | Multi-node Ecto backend (needs schema, migration, Store adapter swap) | 🔜 Planned |
 | Slack Notifications | Webhook alerts on policy changes (needs webhook config, HTTP client, templates) | 🔜 Planned |
-
-### Configurable Route Selection (Free Tier)
-
-Let users manually pick which routes count toward their 50-route free tier cap. The selection persists in CubDB so the list of managed routes survives refreshes and new route additions.
-
-> 🔜 Planned
 
 ---
 

@@ -40,14 +40,19 @@ defmodule ApiManagementConsoleV2.RoutePoliciesTest do
   end
 
   describe "reset_all/0" do
-    test "clears all policies" do
+    test "clears all policies but preserves selection" do
       RoutePolicies.set_route_enabled("get|/test/a", false)
       RoutePolicies.set_route_enabled("get|/test/b", false)
+      Store.set_selection(["get|/test/a", "get|/test/b"])
       assert RoutePolicies.enabled?("get|/test/a") == false
+      assert RoutePolicies.selection_count() == 2
 
       RoutePolicies.reset_all()
       assert RoutePolicies.enabled?("get|/test/a") == true
       assert RoutePolicies.enabled?("get|/test/b") == true
+      # Selection must survive reset
+      assert RoutePolicies.selection_count() == 2
+      assert RoutePolicies.in_selection?("get|/test/a")
     end
   end
 
@@ -105,6 +110,57 @@ defmodule ApiManagementConsoleV2.RoutePoliciesTest do
       hidden2 = Store.hidden_keys()
       refute "get|/test/hidden" in hidden2
       assert Store.hidden_count() == 0
+    end
+  end
+
+  describe "Store.get_selection/0 and set_selection/1" do
+    test "returns empty set by default" do
+      assert MapSet.size(Store.get_selection()) == 0
+    end
+
+    test "persists and retrieves selection" do
+      keys = ["get|/test/s1", "get|/test/s2", "get|/test/s3"]
+      Store.set_selection(keys)
+      selection = Store.get_selection()
+
+      assert MapSet.size(selection) == 3
+      assert MapSet.member?(selection, "get|/test/s1")
+      assert MapSet.member?(selection, "get|/test/s2")
+      assert MapSet.member?(selection, "get|/test/s3")
+    end
+  end
+
+  describe "Store.add_to_selection/1 and remove_from_selection/1" do
+    test "adds and removes keys atomically" do
+      Store.set_selection(["get|/test/s1"])
+      Store.add_to_selection(["get|/test/s2", "get|/test/s3"])
+      assert MapSet.size(Store.get_selection()) == 3
+
+      Store.remove_from_selection(["get|/test/s1"])
+      selection = Store.get_selection()
+      assert MapSet.size(selection) == 2
+      refute MapSet.member?(selection, "get|/test/s1")
+      assert MapSet.member?(selection, "get|/test/s2")
+    end
+  end
+
+  describe "RoutePolicies.selection_count/0 and in_selection?/1" do
+    test "returns 0 when no selection" do
+      Store.set_selection([])
+      assert RoutePolicies.selection_count() == 0
+    end
+
+    test "returns correct count after setting selection" do
+      Store.set_selection([])
+      Store.set_selection(["get|/test/c1", "get|/test/c2"])
+      assert RoutePolicies.selection_count() == 2
+    end
+
+    test "checks membership correctly" do
+      Store.set_selection([])
+      Store.set_selection(["get|/test/c1"])
+      assert RoutePolicies.in_selection?("get|/test/c1") == true
+      assert RoutePolicies.in_selection?("get|/test/c2") == false
     end
   end
 end

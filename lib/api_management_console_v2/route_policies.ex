@@ -82,6 +82,26 @@ defmodule ApiManagementConsoleV2.RoutePolicies do
   @doc "Check if a path belongs to the API console itself."
   def console_route?(path), do: String.contains?(path, "/api-console")
 
+  # --- Route Selection (Free Tier) ---
+
+  @doc "Returns the current route selection as a MapSet of route keys."
+  def get_selection, do: Store.get_selection()
+
+  @doc "Sets the route selection atomically."
+  def set_selection(keys), do: Store.set_selection(keys)
+
+  @doc "Adds keys to the selection atomically."
+  def add_to_selection(keys), do: Store.add_to_selection(keys)
+
+  @doc "Removes keys from the selection atomically."
+  def remove_from_selection(keys), do: Store.remove_from_selection(keys)
+
+  @doc "Returns the count of selected routes."
+  def selection_count, do: MapSet.size(get_selection())
+
+  @doc "Checks if a key is in the current selection."
+  def in_selection?(key), do: MapSet.member?(get_selection(), key)
+
   # --- GenServer ---
 
   @doc false
@@ -102,7 +122,7 @@ defmodule ApiManagementConsoleV2.RoutePolicies do
       nil
     else
       key = route_key(route.verb, route.path)
-      mutable = mutable_route?(route)
+      mutable = mutable_route?(route, key)
 
       %{
         key: key,
@@ -127,29 +147,40 @@ defmodule ApiManagementConsoleV2.RoutePolicies do
 
   defp normalize_method(method) when is_binary(method), do: String.downcase(method)
 
-  defp mutable_route?(route) do
+  defp mutable_route?(route, key) do
     # Console routes and sub-routes (login, logout, audit.csv) are always immutable
     if console_route?(route.path) do
       false
     else
       user_protected = Application.get_env(:api_management_console, :protected_routes, [])
-    immutable_prefixes = user_protected
+      immutable_prefixes = user_protected
 
-    is_immutable =
-      ApiManagementConsoleV2.ConsolePaths.matches?(route.path) or
-      Enum.any?(immutable_prefixes, fn prefix ->
-      cond do
-        is_binary(prefix) ->
-          String.starts_with?(route.path, prefix) or String.ends_with?(route.path, prefix)
-        is_struct(prefix, Regex) ->
-          Regex.match?(prefix, route.path) or Regex.match?(prefix, inspect(route.plug))
-        true -> false
+      is_immutable =
+        ApiManagementConsoleV2.ConsolePaths.matches?(route.path) or
+        Enum.any?(immutable_prefixes, fn prefix ->
+          cond do
+            is_binary(prefix) ->
+              String.starts_with?(route.path, prefix) or String.ends_with?(route.path, prefix)
+            is_struct(prefix, Regex) ->
+              Regex.match?(prefix, route.path) or Regex.match?(prefix, inspect(route.plug))
+            true -> false
+          end
+        end)
+
+      log("[ApiPolicies] mutable? — path=#{route.path}, immutable_prefixes=#{inspect(immutable_prefixes)}, is_immutable=#{is_immutable}")
+
+      if is_immutable do
+        false
+      else
+        # On free tier, only selected routes are mutable
+        alias ApiManagementConsoleV2.Features
+
+        if Features.max_routes() == :unlimited do
+          true
+        else
+          MapSet.member?(get_selection(), key)
+        end
       end
-    end)
-
-    log("[ApiPolicies] mutable? — path=#{route.path}, immutable_prefixes=#{inspect(immutable_prefixes)}, is_immutable=#{is_immutable}")
-
-    not is_immutable
     end
   end
 

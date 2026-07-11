@@ -7,6 +7,7 @@ defmodule ApiManagementConsoleV2.RoutePolicies.Store do
 
   @db_name :api_policies_db
   @hidden_prefix "__hidden__"
+  @selection_key "__free_selection__"
 
   def all do
     CubDB.select(@db_name)
@@ -62,8 +63,25 @@ defmodule ApiManagementConsoleV2.RoutePolicies.Store do
   end
 
   def reset_all do
+    # Preserve the selection key before clearing
+    selection =
+      case CubDB.get(@db_name, @selection_key) do
+        nil -> MapSet.new()
+        sel -> sel
+      end
+
     CubDB.clear(@db_name)
+
+    # Restore selection after clear
+    if MapSet.size(selection) > 0 do
+      CubDB.put(@db_name, @selection_key, selection)
+    end
+
     :ok
+  rescue
+    _ ->
+      CubDB.clear(@db_name)
+      :ok
   end
 
   def enabled?(key) do
@@ -105,4 +123,44 @@ defmodule ApiManagementConsoleV2.RoutePolicies.Store do
   end
 
   defp hidden_key(key), do: @hidden_prefix <> key
+
+  # --- Route Selection (Free Tier) ---
+
+  @doc "Returns the current route selection as a MapSet of route keys."
+  def get_selection do
+    case CubDB.get(@db_name, @selection_key) do
+      nil -> MapSet.new()
+      selection -> selection
+    end
+  rescue
+    _ -> MapSet.new()
+  end
+
+  @doc "Sets the route selection atomically."
+  def set_selection(keys) do
+    CubDB.transaction(@db_name, fn tx ->
+      tx = CubDB.Tx.put(tx, @selection_key, MapSet.new(keys))
+      {:commit, tx, :ok}
+    end)
+  end
+
+  @doc "Adds keys to the selection atomically."
+  def add_to_selection(keys) do
+    CubDB.transaction(@db_name, fn tx ->
+      current = CubDB.Tx.get(tx, @selection_key) || MapSet.new()
+      updated = Enum.reduce(keys, current, &MapSet.put(&2, &1))
+      tx = CubDB.Tx.put(tx, @selection_key, updated)
+      {:commit, tx, :ok}
+    end)
+  end
+
+  @doc "Removes keys from the selection atomically."
+  def remove_from_selection(keys) do
+    CubDB.transaction(@db_name, fn tx ->
+      current = CubDB.Tx.get(tx, @selection_key) || MapSet.new()
+      updated = Enum.reduce(keys, current, &MapSet.delete(&2, &1))
+      tx = CubDB.Tx.put(tx, @selection_key, updated)
+      {:commit, tx, :ok}
+    end)
+  end
 end

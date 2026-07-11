@@ -154,6 +154,15 @@ Or set the license key via environment variable:
 export API_CONSOLE_LICENSE_KEY=eyJhbGciOiJSUzI1NiIs...
 ```
 
+### Add data folder to .gitignore
+
+The console stores its data locally in `api-console-data/` (or your custom `storage_dir`). Add it to your app's `.gitignore`:
+
+```gitignore
+# API Management Console data
+api-console-data/
+```
+
 ### Manual route setup (no macro)
 
 ```elixir
@@ -206,6 +215,9 @@ $ mix phx.server
 | Audit Log | Every action logged with username, expandable with pagination, CSV download |
 | 30-Day Audit History | Free tier retains 30 days of audit entries |
 | 50-Route Limit | Free tier manages up to 50 routes — extras shown as faded teaser with upgrade CTA |
+| Route Selection | Pick which 50 routes to manage via modal; unselected routes are read-only with upgrade prompt |
+| Compare Plans Modal | Side-by-side Free vs PRO feature matrix with active plan highlighted |
+| Browser Tab Title | Shows app name in browser tab |
 
 ### Paid (PRO) Tier
 
